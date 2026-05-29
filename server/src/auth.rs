@@ -121,7 +121,7 @@ pub async fn login(
     }
 
     let record = sqlx::query_as::<_, LoginRecord>(
-        "SELECT id, password_hash FROM users WHERE username = $1"
+        "SELECT id, password_hash FROM users WHERE username = $1 OR email = $1"
     )
     .bind(&payload.username)
     .fetch_optional(pool)

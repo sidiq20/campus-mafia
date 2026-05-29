@@ -7,7 +7,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
   // Define routes that require authentication
-  const protectedRoutes = ['/feed', '/territory', '/comms', '/black-market']
+  const protectedRoutes = ['/feed', '/territory', '/comms', '/black-market', '/factions', '/profile']
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
 
   if (isProtectedRoute && !token) {
@@ -34,6 +34,8 @@ export const config = {
     '/territory/:path*',
     '/comms/:path*',
     '/black-market/:path*',
+    '/factions/:path*',
+    '/profile/:path*',
     '/login',
     '/signup'
   ]

@@ -54,7 +54,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-xs text-green-500 uppercase tracking-widest mb-1.5">Netrunner Alias</label>
+            <label className="block text-xs text-green-500 uppercase tracking-widest mb-1.5">Alias or Email</label>
             <div className="relative flex items-center">
               <ShieldAlert className="absolute left-3 w-4 h-4 text-zinc-500" />
               <input 
@@ -63,7 +63,7 @@ export default function LoginPage() {
                 value={formData.username}
                 onChange={e => setFormData({...formData, username: e.target.value})}
                 className="w-full bg-zinc-950/50 border border-zinc-800 rounded pl-10 pr-4 py-2.5 text-sm focus:border-green-500/50 outline-none transition-colors"
-                placeholder="Enter alias..."
+                placeholder="Enter alias or email..."
               />
             </div>
           </div>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell } from 'lucide-react';
+import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
 import { Toaster, toast } from 'sonner';
+import PwaInstallBanner from './PwaInstallBanner';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -52,7 +53,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             type: "ChatMessage",
             author: user?.username || 'phantom',
             faction: user?.faction_name || 'Unaffiliated',
-            msg: chatInput.trim()
+            msg: chatInput.trim(),
+            channel_type: "global",
+            channel_id: null
           }));
         setChatInput('');
       }
@@ -85,6 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NavItem href="/factions" icon={<Shield size={18} />} label="Factions" active={pathname.startsWith('/factions')} />
             <NavItem href="/comms" icon={<MessageSquare size={18} />} label="Comms" active={pathname === '/comms'} />
             <NavItem href="/black-market" icon={<Zap size={18} />} label="Black Market" active={pathname === '/black-market'} />
+            <NavItem href="/profile" icon={<User size={18} />} label="Profile" active={pathname === '/profile'} />
           </nav>
         </div>
 
@@ -158,6 +162,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Cyberpunk Scanline Overlay */}
       <div className="pointer-events-none fixed inset-0 z-50 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-20 mix-blend-overlay"></div>
+      <PwaInstallBanner />
     </div>
   );
 }

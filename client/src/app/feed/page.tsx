@@ -15,6 +15,8 @@ type Post = {
   faction_name: string | null;
   is_anonymous: boolean | null;
   user_id: string;
+  reply_count: number;
+  has_boosted: boolean;
 };
 
 type Comment = {
@@ -189,6 +191,7 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
       setCommentText('');
       toast.success("Comment added (+2 INF)");
       queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
     }
   });
 
@@ -213,18 +216,18 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
         <div className="flex gap-4">
           <button 
             onClick={() => boostMutation.mutate()} 
-            disabled={boostMutation.isPending}
-            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-green-400 transition-colors"
+            disabled={boostMutation.isPending || post.has_boosted}
+            className={`flex items-center gap-1.5 text-xs transition-colors ${post.has_boosted ? 'text-green-500 font-bold cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
           >
-            <Zap size={14} />
-            <span>Boost</span>
+            <Zap size={14} className={post.has_boosted ? "fill-green-500" : ""} />
+            <span>{post.has_boosted ? 'Boosted' : 'Boost'}</span>
           </button>
           <button 
             onClick={() => setShowComments(!showComments)}
             className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors"
           >
             <MessageSquare size={14} />
-            <span>{comments ? comments.length : 0} Replies</span>
+            <span>{post.reply_count} Replies</span>
           </button>
         </div>
         <span className="text-xs font-bold text-green-500">+{post.influence_earned} INF</span>

@@ -20,7 +20,7 @@ type ChatMessage = {
 export default function CommsPage() {
   const { user } = useUser();
   const queryClient = useQueryClient();
-  const [activeChannel, setActiveChannel] = useState<'global' | 'faction' | null>(null);
+  const [activeChannel, setActiveChannel] = useState<'global' | 'faction' | null>('global');
   const [content, setContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 

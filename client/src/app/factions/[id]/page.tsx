@@ -16,6 +16,12 @@ type Faction = {
   member_count: number;
 };
 
+type FactionMember = {
+  id: string;
+  username: string;
+  influence: number;
+};
+
 export default function FactionHubPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
   const { user } = useUser();
@@ -25,6 +31,17 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
     queryKey: ['faction', unwrappedParams.id],
     queryFn: async () => {
       const res = await fetch(`http://localhost:8080/api/factions/${unwrappedParams.id}`, {
+        credentials: 'true' === 'true' ? 'include' : 'same-origin',
+      });
+      if (!res.ok) throw new Error('Network response was not ok');
+      return res.json();
+    },
+  });
+
+  const { data: members, isLoading: isLoadingMembers } = useQuery<FactionMember[]>({
+    queryKey: ['faction-members', unwrappedParams.id],
+    queryFn: async () => {
+      const res = await fetch(`http://localhost:8080/api/factions/${unwrappedParams.id}/members`, {
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
       });
       if (!res.ok) throw new Error('Network response was not ok');
@@ -114,6 +131,35 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                   </div>
                 </div>
               )}
+
+              {/* Roster Area */}
+              <div className="border border-zinc-800 bg-black/40 rounded mt-6">
+                <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Active Roster</h3>
+                  <span className="text-xs text-zinc-500">{members?.length || 0} Operatives</span>
+                </div>
+                <div className="p-4">
+                  {isLoadingMembers ? (
+                    <div className="text-center text-zinc-500 text-xs py-4 animate-pulse">Scanning signatures...</div>
+                  ) : members?.length === 0 ? (
+                    <div className="text-center text-zinc-500 text-xs py-4">No operatives found.</div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {members?.map(member => (
+                        <div key={member.id} className="flex items-center justify-between p-3 border border-zinc-800/50 bg-black/60 rounded">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded bg-zinc-900 border border-zinc-700 flex items-center justify-center">
+                              <span className="text-green-500 font-bold text-xs">{member.username.substring(0, 2).toUpperCase()}</span>
+                            </div>
+                            <span className="text-sm font-bold text-zinc-300">@{member.username}</span>
+                          </div>
+                          <div className="text-xs font-mono text-yellow-500">{member.influence} INF</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </>
           )}
         </div>

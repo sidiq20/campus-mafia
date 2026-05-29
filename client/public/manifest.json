@@ -1,0 +1,21 @@
+{
+  "name": "DepartmentOS",
+  "short_name": "DeptOS",
+  "description": "Campus Mafia: The Social Network is the Game",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#00ff41",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

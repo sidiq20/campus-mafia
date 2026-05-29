@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+  /* Cyberpunk defaults to dark mode, so light mode is just basic */
+}
+
+.dark {
+  /* Cyberpunk Underground Theme */
+  --background: #050505; /* Deep absolute black-ish */
+  --foreground: #00ff41; /* Hacker Green default text */
+  
+  --card: #0a0a0a;
+  --card-foreground: #00ff41;
+  
+  --popover: #0a0a0a;
+  --popover-foreground: #00ff41;
+  
+  --primary: #00ff41; /* Main neon green */
+  --primary-foreground: #000000; /* Black text on green */
+  
+  --secondary: #1a1a1a;
+  --secondary-foreground: #00ff41;
+  
+  --muted: #111111;
+  --muted-foreground: #008f11; /* Darker green */
+  
+  --accent: #222222;
+  --accent-foreground: #ffffff; /* White for strong highlights */
+  
+  --destructive: #ff003c; /* Cyberpunk neon red */
+  --destructive-foreground: #000000;
+  
+  --border: #00ff4133; /* 20% opacity green */
+  --input: #111111;
+  --ring: #00ff41;
+  
+  --radius: 0px; /* Blocky, sharp edges for cyberpunk feel */
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-mono antialiased overflow-x-hidden;
+    /* Optional CRT scanline background */
+    background-image: linear-gradient(rgba(0, 255, 65, 0.03) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 4px, 6px 100%;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight uppercase;
+  }
+}
+
+@layer utilities {
+  .glow-text {
+    text-shadow: 0 0 5px rgba(0, 255, 65, 0.5), 0 0 10px rgba(0, 255, 65, 0.3);
+  }
+
+  .glitch {
+    position: relative;
+  }
+
+  .glitch::before, .glitch::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--background);
+  }
+
+  .glitch::before {
+    left: 2px;
+    text-shadow: -1px 0 red;
+    clip: rect(24px, 550px, 90px, 0);
+    animation: glitch-anim-2 3s infinite linear alternate-reverse;
+  }
+
+  .glitch::after {
+    left: -2px;
+    text-shadow: -1px 0 blue;
+    clip: rect(85px, 550px, 140px, 0);
+    animation: glitch-anim 2.5s infinite linear alternate-reverse;
+  }
+}
+
+@keyframes glitch-anim {
+  0% { clip: rect(10px, 9999px, 83px, 0); }
+  20% { clip: rect(62px, 9999px, 14px, 0); }
+  40% { clip: rect(29px, 9999px, 59px, 0); }
+  60% { clip: rect(98px, 9999px, 20px, 0); }
+  80% { clip: rect(11px, 9999px, 48px, 0); }
+  100% { clip: rect(88px, 9999px, 92px, 0); }
+}
+
+@keyframes glitch-anim-2 {
+  0% { clip: rect(65px, 9999px, 100px, 0); }
+  20% { clip: rect(15px, 9999px, 12px, 0); }
+  40% { clip: rect(44px, 9999px, 88px, 0); }
+  60% { clip: rect(29px, 9999px, 32px, 0); }
+  80% { clip: rect(94px, 9999px, 5px, 0); }
+  100% { clip: rect(13px, 9999px, 66px, 0); }
+}

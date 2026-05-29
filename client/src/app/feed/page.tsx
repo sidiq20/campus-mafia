@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
+import { API_URL } from '@/lib/api';
 
 type Post = {
   id: string;
@@ -35,7 +36,7 @@ export default function Dashboard() {
   const { data: posts, isLoading } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:8080/api/posts', {
+      const res = await fetch(`${API_URL}/api/posts`, {
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
       });
       if (!res.ok) throw new Error('Network response was not ok');
@@ -45,7 +46,7 @@ export default function Dashboard() {
 
   const mutation = useMutation({
     mutationFn: async (newPost: { content: string, is_anonymous: boolean }) => {
-      const res = await fetch('http://localhost:8080/api/posts', {
+      const res = await fetch(`${API_URL}/api/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
@@ -138,7 +139,7 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`http://localhost:8080/api/posts/${post.id}`, {
+      const res = await fetch(`${API_URL}/api/posts/${post.id}`, {
         method: 'DELETE',
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
       });
@@ -152,7 +153,7 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
 
   const boostMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`http://localhost:8080/api/posts/${post.id}/react`, {
+      const res = await fetch(`${API_URL}/api/posts/${post.id}/react`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
@@ -169,7 +170,7 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
   const { data: comments } = useQuery<Comment[]>({
     queryKey: ['comments', post.id],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:8080/api/posts/${post.id}/comments`, {
+      const res = await fetch(`${API_URL}/api/posts/${post.id}/comments`, {
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
       });
       return res.json();
@@ -179,7 +180,7 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
 
   const commentMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`http://localhost:8080/api/posts/${post.id}/comments`, {
+      const res = await fetch(`${API_URL}/api/posts/${post.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'true' === 'true' ? 'include' : 'same-origin',

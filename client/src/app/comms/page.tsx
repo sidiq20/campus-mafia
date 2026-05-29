@@ -6,6 +6,7 @@ import { MessageSquare, Lock, Send } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { API_URL, WS_URL } from '@/lib/api';
 
 type ChatMessage = {
   id: string;
@@ -35,8 +36,8 @@ export default function CommsPage() {
     queryFn: async () => {
       if (!activeChannel) return [];
       const endpoint = activeChannel === 'global' 
-        ? 'http://localhost:8080/api/comms/global'
-        : `http://localhost:8080/api/comms/faction/${user?.faction_id}`;
+        ? `${API_URL}/api/comms/global`
+        : `${API_URL}/api/comms/faction/${user?.faction_id}`;
       
       const res = await fetch(endpoint, {
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
@@ -51,8 +52,8 @@ export default function CommsPage() {
   const mutation = useMutation({
     mutationFn: async () => {
       const endpoint = activeChannel === 'global' 
-        ? 'http://localhost:8080/api/comms/global'
-        : `http://localhost:8080/api/comms/faction/${user?.faction_id}`;
+        ? `${API_URL}/api/comms/global`
+        : `${API_URL}/api/comms/faction/${user?.faction_id}`;
         
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -80,7 +81,7 @@ export default function CommsPage() {
 
   // Setup WebSocket for real-time updates specific to this page
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8080/api/ws');
+    const ws = new WebSocket(`${WS_URL}/api/ws`);
     
     ws.onmessage = (event) => {
       try {

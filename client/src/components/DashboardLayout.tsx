@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
 import { Toaster, toast } from 'sonner';
 import PwaInstallBanner from './PwaInstallBanner';
+import { WS_URL } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,7 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8080/api/ws');
+    const ws = new WebSocket(`${WS_URL}/api/ws`);
     wsRef.current = ws;
 
     ws.onmessage = (event) => {

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { API_URL } from '@/lib/api';
 
 export type UserProfile = {
   id: string;
@@ -28,7 +29,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const { data: user, isLoading } = useQuery<UserProfile>({
     queryKey: ['me'],
     queryFn: async () => {
-      const res = await fetch('https://campus-mafia-sidiqolasode5695-s7vx2lv9.leapcell.dev/api/auth/me', {
+      const res = await fetch(`${API_URL}/api/auth/me`, {
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
       });
       if (!res.ok) {

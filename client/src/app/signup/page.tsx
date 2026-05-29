@@ -16,7 +16,7 @@ export default function SignupPage() {
     setLoading(true);
     
     try {
-      const res = await fetch('http://localhost:8080/api/auth/register', {
+      const res = await fetch('https://campus-mafia-sidiqolasode5695-s7vx2lv9.leapcell.dev/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'true' === 'true' ? 'include' : 'same-origin', // include cookies

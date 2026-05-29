@@ -28,7 +28,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const { data: user, isLoading } = useQuery<UserProfile>({
     queryKey: ['me'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:8080/api/auth/me', {
+      const res = await fetch('https://campus-mafia-sidiqolasode5695-s7vx2lv9.leapcell.dev/api/auth/me', {
         credentials: 'true' === 'true' ? 'include' : 'same-origin',
       });
       if (!res.ok) {

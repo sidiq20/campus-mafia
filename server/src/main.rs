@@ -160,6 +160,8 @@ async fn delete_post(
 async fn main() {
     dotenvy::dotenv().ok();
 
+    println!("Starting server...");
+    println!("Loading environment variables...");
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     println!("Connecting to database...");

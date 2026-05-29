@@ -162,9 +162,12 @@ async fn main() {
 
     println!("Starting server...");
     println!("Loading environment variables...");
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+    let database_url =
+        env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     println!("Connecting to database...");
+
     let pool = match PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
@@ -172,15 +175,17 @@ async fn main() {
     {
         Ok(pool) => {
             println!("✅ Connection to the database is successful!");
-            
-            // Run migrations
+
             println!("Running database migrations...");
-            if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
-                println!("🔥 Failed to run migrations: {:?}", e);
-                std::process::exit(1);
+
+            match sqlx::migrate!("./migrations").run(&pool).await {
+                Ok(_) => println!("✅ Migrations completed successfully!"),
+                Err(e) => {
+                    println!("🔥 Failed to run migrations: {:?}", e);
+                    std::process::exit(1);
+                }
             }
-            println!("✅ Migrations completed successfully!");
-            
+
             pool
         }
         Err(err) => {
@@ -191,42 +196,87 @@ async fn main() {
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(
-            |origin: &axum::http::HeaderValue, _request_parts: &axum::http::request::Parts| {
+            |origin: &axum::http::HeaderValue,
+             _request_parts: &axum::http::request::Parts| {
                 if let Ok(origin_str) = origin.to_str() {
-                    return origin_str == "http://localhost:3000" || origin_str.ends_with(".vercel.app");
+                    origin_str == "http://localhost:3000"
+                        || origin_str.ends_with(".vercel.app")
+                } else {
+                    false
                 }
-                false
             },
         ))
-        .allow_methods(vec![
+        .allow_methods([
             axum::http::Method::GET,
             axum::http::Method::POST,
             axum::http::Method::PUT,
             axum::http::Method::DELETE,
             axum::http::Method::OPTIONS,
         ])
-        .allow_headers(vec![axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ])
         .allow_credentials(true);
 
     let app = Router::<ServerState>::new()
+        // Health checks
+        .route("/", get(|| async { "Server Running" }))
+        .route("/health", get(|| async { "OK" }))
+        .route("/kaithheathcheck", get(|| async { "OK" }))
         .route("/api/health", get(|| async { "Healthy" }))
-        .route("/api/posts", axum::routing::post(create_post).get(get_posts))
-        .route("/api/posts/:id", axum::routing::delete(delete_post))
+
+        // Auth
         .route("/api/auth/register", axum::routing::post(auth::register))
         .route("/api/auth/login", axum::routing::post(auth::login))
         .route("/api/auth/logout", axum::routing::post(auth::logout))
         .route("/api/auth/me", get(auth::me))
-        .route("/api/posts/:id/comments", axum::routing::post(social::create_comment).get(social::get_comments))
-        .route("/api/posts/:id/react", axum::routing::post(social::add_reaction))
+
+        // Posts
+        .route("/api/posts", axum::routing::post(create_post).get(get_posts))
+        .route("/api/posts/:id", axum::routing::delete(delete_post))
+        .route(
+            "/api/posts/:id/comments",
+            axum::routing::post(social::create_comment)
+                .get(social::get_comments),
+        )
+        .route(
+            "/api/posts/:id/react",
+            axum::routing::post(social::add_reaction),
+        )
+
+        // Game
         .route("/api/territories", get(game::get_territories))
-        .route("/api/territories/:id/attack", axum::routing::post(game::attack_territory))
+        .route(
+            "/api/territories/:id/attack",
+            axum::routing::post(game::attack_territory),
+        )
         .route("/api/factions", get(game::get_factions))
         .route("/api/factions/:id", get(game::get_faction_by_id))
-        .route("/api/factions/:id/members", get(game::get_faction_members))
-        .route("/api/factions/create", axum::routing::post(game::create_faction))
-        .route("/api/comms/global", axum::routing::post(comms::send_global_chat).get(comms::get_global_chat))
-        .route("/api/comms/faction/:id", axum::routing::post(comms::send_faction_chat).get(comms::get_faction_chat))
+        .route(
+            "/api/factions/:id/members",
+            get(game::get_faction_members),
+        )
+        .route(
+            "/api/factions/create",
+            axum::routing::post(game::create_faction),
+        )
+
+        // Comms
+        .route(
+            "/api/comms/global",
+            axum::routing::post(comms::send_global_chat)
+                .get(comms::get_global_chat),
+        )
+        .route(
+            "/api/comms/faction/:id",
+            axum::routing::post(comms::send_faction_chat)
+                .get(comms::get_faction_chat),
+        )
+
+        // Websocket
         .route("/api/ws", get(ws::ws_handler))
+
         .layer(cors)
         .with_state(ServerState {
             pool,
@@ -235,9 +285,30 @@ async fn main() {
             }),
         });
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    let port: u16 = env::var("PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse()
+        .unwrap_or(8080);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+
+    println!("Binding to {}", addr);
+
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => {
+            println!("✅ TCP listener bound successfully");
+            listener
+        }
+        Err(e) => {
+            println!("🔥 Failed to bind listener: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
     println!("🚀 Server listening on {}", addr);
-    
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    println!("🚀 Starting Axum...");
+
+    if let Err(e) = axum::serve(listener, app).await {
+        println!("🔥 Axum server crashed: {:?}", e);
+    }
 }

@@ -14,7 +14,28 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "DepartmentOS: Campus Mafia",
-  description: "Realtime social and gaming network.",
+  description: "Realtime social and gaming network. Survive, hack, and dominate.",
+  openGraph: {
+    title: "DepartmentOS: Campus Mafia",
+    description: "Realtime social and gaming network. Survive, hack, and dominate.",
+    url: "https://campus-mafia.vercel.app",
+    siteName: "DepartmentOS",
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "DepartmentOS - Campus Mafia",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "DepartmentOS: Campus Mafia",
+    description: "Realtime social and gaming network. Survive, hack, and dominate.",
+    images: ["/opengraph-image.png"],
+  },
 };
 
 import Providers from "./providers";

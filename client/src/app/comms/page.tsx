@@ -48,7 +48,7 @@ export default function CommsPage() {
   });
 
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (messageContent: string) => {
       const path = activeChannel === 'global' 
         ? '/api/comms/global'
         : `/api/comms/faction/${user?.faction_id}`;
@@ -56,24 +56,51 @@ export default function CommsPage() {
       const res = await apiFetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content })
+        body: JSON.stringify({ content: messageContent })
       });
       if (!res.ok) throw new Error('Transmission failed');
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async (messageContent) => {
+      await queryClient.cancelQueries({ queryKey: ['chat', activeChannel] });
+      const previousMessages = queryClient.getQueryData<ChatMessage[]>(['chat', activeChannel]);
+      
+      queryClient.setQueryData<ChatMessage[]>(['chat', activeChannel], (old) => {
+        const optimisticMsg: ChatMessage = {
+          id: `temp-${Date.now()}`,
+          channel_type: activeChannel || 'global',
+          channel_id: activeChannel === 'global' ? null : (user?.faction_id || null),
+          content: messageContent,
+          author_name: user?.username || 'phantom',
+          faction_name: user?.faction_name || 'Unaffiliated',
+          created_at: new Date().toISOString(),
+        };
+        return old ? [...old, optimisticMsg] : [optimisticMsg];
+      });
+      
       setContent('');
-      queryClient.invalidateQueries({ queryKey: ['chat', activeChannel] });
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+      
+      return { previousMessages, messageContent };
     },
-    onError: () => {
+    onError: (err, variables, context) => {
+      if (context?.previousMessages) {
+        queryClient.setQueryData(['chat', activeChannel], context.previousMessages);
+      }
+      setContent(context?.messageContent || '');
       toast.error('Transmission failed. Signal lost.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['chat', activeChannel] });
     }
   });
 
   const handleSend = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!content.trim() || !activeChannel) return;
-    mutation.mutate();
+    mutation.mutate(content);
   };
 
   // Setup WebSocket for real-time updates specific to this page
@@ -111,11 +138,11 @@ export default function CommsPage() {
         <h2 className="text-sm font-semibold text-green-500 uppercase tracking-widest">Encrypted Comms</h2>
       </header>
       
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
         
         {/* Sidebar Channels List */}
-        <div className="w-1/3 border-r border-zinc-800 bg-black/40 flex flex-col p-4 gap-4 overflow-y-auto">
-          <h3 className="text-xs text-zinc-500 uppercase tracking-widest mb-2">Available Frequencies</h3>
+        <div className="w-full md:w-1/3 h-48 md:h-auto border-b md:border-b-0 md:border-r border-zinc-800 bg-black/40 flex flex-col p-4 gap-4 overflow-y-auto shrink-0">
+          <h3 className="text-xs text-zinc-500 uppercase tracking-widest mb-2 hidden md:block">Available Frequencies</h3>
           
           <div 
             onClick={() => setActiveChannel('global')}
@@ -158,7 +185,7 @@ export default function CommsPage() {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col bg-[#050505]">
+        <div className="flex-1 flex flex-col bg-black/20 min-h-0">
           {!activeChannel ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">

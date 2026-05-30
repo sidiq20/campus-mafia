@@ -27,7 +27,7 @@ export default function ProfilePage() {
         <h2 className="text-sm font-semibold text-green-500 uppercase tracking-widest">Operative Profile</h2>
       </header>
 
-      <div className="flex-1 p-6 overflow-y-auto bg-[#050505]">
+      <div className="flex-1 p-6 pb-24 overflow-y-auto bg-[#050505]">
         <div className="max-w-2xl mx-auto space-y-6">
           
           {/* Header Card */}

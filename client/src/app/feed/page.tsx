@@ -52,9 +52,39 @@ export default function Dashboard() {
       if (!res.ok) throw new Error('Failed to create post');
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    onMutate: async (newPost) => {
+      await queryClient.cancelQueries({ queryKey: ['posts'] });
+      const previousPosts = queryClient.getQueryData<Post[]>(['posts']);
+      
+      queryClient.setQueryData<Post[]>(['posts'], (old) => {
+        const optimisticPost: Post = {
+          id: `temp-${Date.now()}`,
+          content: newPost.content,
+          influence_earned: 0,
+          author_name: newPost.is_anonymous ? 'Anonymous' : (user?.username || 'phantom'),
+          faction_name: newPost.is_anonymous ? null : (user?.faction_name || null),
+          is_anonymous: newPost.is_anonymous,
+          user_id: user?.id || 'temp',
+          reply_count: 0,
+          has_boosted: false,
+        };
+        return old ? [optimisticPost, ...old] : [optimisticPost];
+      });
+      
       setContent('');
+      return { previousPosts };
+    },
+    onError: (err, newPost, context) => {
+      if (context?.previousPosts) {
+        queryClient.setQueryData(['posts'], context.previousPosts);
+      }
+      setContent(newPost.content);
+      toast.error('Transmission failed. Signal lost.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    onSuccess: () => {
       toast.success('Broadcast transmitted');
     },
   });

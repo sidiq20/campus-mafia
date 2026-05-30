@@ -14,7 +14,7 @@ export default function BlackMarketPage() {
         </div>
       </header>
       
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-24">
         <div>
           <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-widest mb-4 flex items-center gap-2">
             <Zap size={16} className="text-yellow-500" />

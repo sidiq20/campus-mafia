@@ -107,7 +107,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <nav className="flex flex-col gap-1">
             <NavItem href="/feed" icon={<Crosshair size={18} />} label="Feed" active={pathname === '/feed'} />
             <NavItem href="/territory" icon={<MapIcon size={18} />} label="Territory" active={pathname === '/territory'} />
-            <NavItem href="/factions" icon={<Shield size={18} />} label="Factions" active={pathname.startsWith('/factions')} />
+            <NavItem href="/factions" icon={<Shield size={18} />} label="Factions" active={pathname === '/factions'} />
+            {user?.faction_id && (
+              <NavItem href={`/factions/${user.faction_id}`} icon={<Shield size={18} className="text-purple-500" />} label="My Faction" active={pathname === `/factions/${user.faction_id}`} />
+            )}
             <NavItem href="/comms" icon={<MessageSquare size={18} />} label="Comms" active={pathname === '/comms'} />
             <NavItem href="/notifications" icon={<Bell size={18} />} label="Alerts" active={pathname === '/notifications'} />
             <NavItem href="/black-market" icon={<Zap size={18} />} label="Black Market" active={pathname === '/black-market'} />

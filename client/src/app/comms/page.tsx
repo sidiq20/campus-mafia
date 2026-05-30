@@ -223,8 +223,19 @@ export default function CommsPage() {
                         {msg.faction_name && activeChannel === 'global' && (
                           <span className="text-[10px] bg-zinc-900 text-zinc-500 px-1 rounded">{msg.faction_name}</span>
                         )}
-                        <span className="ml-auto text-[10px] text-zinc-600">
+                        <span className="ml-auto text-[10px] text-zinc-600 flex items-center gap-2">
                           {msg.created_at ? new Date(msg.created_at).toLocaleString() : ''}
+                          {msg.author_name !== user?.username && (
+                            <button 
+                              onClick={() => {
+                                setContent(`@${msg.author_name} `);
+                                // Focus input if we had a ref to it, but just setting state is fine
+                              }}
+                              className="text-blue-500 hover:text-blue-400 uppercase font-bold"
+                            >
+                              Reply
+                            </button>
+                          )}
                         </span>
                       </div>
                       <div className={`px-4 py-2 rounded max-w-[80%] ${

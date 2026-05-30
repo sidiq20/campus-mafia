@@ -56,7 +56,17 @@ export default function Dashboard() {
     },
     onMutate: async (newPost) => {
       await queryClient.cancelQueries({ queryKey: ['posts'] });
+      await queryClient.cancelQueries({ queryKey: ['me'] });
+      
       const previousPosts = queryClient.getQueryData<Post[]>(['posts']);
+      const previousUser = queryClient.getQueryData<any>(['me']);
+      
+      if (previousUser) {
+        queryClient.setQueryData(['me'], {
+          ...previousUser,
+          influence: previousUser.influence + 10
+        });
+      }
       
       queryClient.setQueryData<Post[]>(['posts'], (old) => {
         const optimisticPost: Post = {
@@ -73,23 +83,25 @@ export default function Dashboard() {
         };
         return old ? [optimisticPost, ...old] : [optimisticPost];
       });
-      
-      setContent('');
-      return { previousPosts };
+      return { previousPosts, previousUser };
     },
     onError: (err, newPost, context) => {
       if (context?.previousPosts) {
         queryClient.setQueryData(['posts'], context.previousPosts);
+      }
+      if (context?.previousUser) {
+        queryClient.setQueryData(['me'], context.previousUser);
       }
       setContent(newPost.content);
       toast.error('Transmission failed. Signal lost.');
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
     },
     onSuccess: () => {
       setContent('');
-      toast.success('Broadcast sent');
+      toast.success('Broadcast sent (+10 INF)');
     },
   });
 
@@ -194,6 +206,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
     onSuccess: () => {
       toast.success("Broadcast boosted (+1 INF)");
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
     }
   });
 
@@ -220,6 +233,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       toast.success("Comment added (+2 INF)");
       queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
     }
   });
 

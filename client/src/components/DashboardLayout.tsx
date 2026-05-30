@@ -5,10 +5,10 @@ import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Toaster, toast } from 'sonner';
 import PwaInstallBanner from './PwaInstallBanner';
-import { WS_URL, clearToken } from '@/lib/api';
+import { WS_URL, clearToken, apiFetch } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -19,6 +19,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isLeftOpen, setIsLeftOpen] = useState(false);
   const [isRightOpen, setIsRightOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+
+  const { data: leaderboard } = useQuery<{username: string, influence: number, faction_name: string | null}[]>({
+    queryKey: ['leaderboard'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/leaderboard');
+      if (!res.ok) throw new Error('Failed to fetch leaderboard');
+      return res.json();
+    },
+    refetchInterval: 30000,
+  });
 
   useEffect(() => {
     const ws = new WebSocket(`${WS_URL}/api/ws`);
@@ -64,13 +74,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     }
   };
-  // Client-side auth guard: redirect to login if not authenticated
-  useEffect(() => {
-    if (!isLoading && !user) {
-      window.location.href = '/login';
-    }
-  }, [isLoading, user]);
-
   if (isLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#09090b] text-zinc-100 font-mono">
@@ -79,10 +82,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
     );
-  }
-
-  if (!user) {
-    return null; // Will redirect via useEffect above
   }
 
   return (
@@ -117,30 +116,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="mt-auto p-4 border border-zinc-800 rounded bg-zinc-950/50">
           <div className="text-xs text-zinc-500 mb-1 uppercase tracking-wider">Identity</div>
-          <div className="font-bold text-green-400">@{user?.username || 'phantom'}</div>
-          <div className="flex justify-between items-center mt-2 text-xs">
-            <span className="text-zinc-400">Faction</span>
-            <span className="text-purple-400 font-bold">{user?.faction_name || 'Unaffiliated'}</span>
-          </div>
-          <div className="flex justify-between items-center mt-1 text-xs">
-            <span className="text-zinc-400">Influence</span>
-            <span className="text-yellow-500">{user?.influence || 0}</span>
-          </div>
-          <div className="flex justify-between items-center mt-1 text-xs">
-            <span className="text-zinc-400">Reputation</span>
-            <span className="text-blue-500">{user?.reputation || 0}</span>
-          </div>
-          <button 
-            onClick={() => {
-              clearToken();
-              queryClient.clear();
-              window.location.href = '/login';
-            }}
-            className="w-full mt-4 py-2 border border-red-500/30 text-red-500/70 hover:text-red-500 hover:bg-red-500/10 rounded flex items-center justify-center gap-2 text-xs uppercase font-bold transition-colors"
-          >
-            <LogOut size={14} />
-            Disconnect
-          </button>
+          
+          {user ? (
+            <>
+              <div className="font-bold text-green-400">@{user.username}</div>
+              <div className="flex justify-between items-center mt-2 text-xs">
+                <span className="text-zinc-400">Faction</span>
+                {user.faction_id ? (
+                  <Link href={`/factions/${user.faction_id}`} className="text-purple-400 font-bold hover:underline">
+                    {user.faction_name}
+                  </Link>
+                ) : (
+                  <span className="text-purple-400 font-bold">Unaffiliated</span>
+                )}
+              </div>
+              <div className="flex justify-between items-center mt-1 text-xs">
+                <span className="text-zinc-400">Influence</span>
+                <span className="text-yellow-500">{user.influence || 0}</span>
+              </div>
+              <div className="flex justify-between items-center mt-1 text-xs">
+                <span className="text-zinc-400">Reputation</span>
+                <span className="text-blue-500">{user.reputation || 0}</span>
+              </div>
+              <button 
+                onClick={() => {
+                  clearToken();
+                  queryClient.clear();
+                  window.location.href = '/login';
+                }}
+                className="w-full mt-4 py-2 border border-red-500/30 text-red-500/70 hover:text-red-500 hover:bg-red-500/10 rounded flex items-center justify-center gap-2 text-xs uppercase font-bold transition-colors"
+              >
+                <LogOut size={14} />
+                Disconnect
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="font-bold text-zinc-500">Anonymous Operative</div>
+              <div className="mt-4 flex gap-2">
+                <Link href="/login" className="flex-1 text-center py-2 bg-green-500/10 text-green-500 border border-green-500/30 rounded text-xs uppercase font-bold transition-colors hover:bg-green-500/20">
+                  Login
+                </Link>
+                <Link href="/signup" className="flex-1 text-center py-2 bg-zinc-800 text-zinc-300 border border-zinc-700 rounded text-xs uppercase font-bold transition-colors hover:bg-zinc-700">
+                  Sign Up
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </aside>
 
@@ -166,30 +188,42 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
         </div>
         
-        {/* Global Chat */}
+        {/* Top Agents Leaderboard */}
+        <div className="h-1/3 border-b border-green-500/20 p-4 flex flex-col">
+          <div className="text-xs font-semibold text-yellow-500 uppercase tracking-widest mb-3 flex items-center justify-between">
+            <span>Top Agents</span>
+            <Zap size={14} />
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+            {leaderboard?.map((agent, i) => (
+              <div key={i} className="flex items-center justify-between text-xs bg-zinc-900/50 p-2 rounded border border-zinc-800/50">
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-600 font-bold w-4">{i + 1}.</span>
+                  <span className="font-bold text-zinc-300">@{agent.username}</span>
+                </div>
+                <div className="flex gap-2">
+                  {agent.faction_name && <span className="text-[10px] text-purple-400 px-1 bg-purple-500/10 rounded">{agent.faction_name}</span>}
+                  <span className="text-yellow-500 font-mono">{agent.influence}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* System Activity Ticker */}
         <div className="flex-1 flex flex-col">
           <div className="p-3 border-b border-green-500/20 bg-black/40 flex justify-between items-center">
-            <h3 className="text-xs font-semibold text-green-500 uppercase tracking-widest">Encrypted Comms</h3>
-            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+            <h3 className="text-xs font-semibold text-blue-500 uppercase tracking-widest">System Activity</h3>
+            <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.length === 0 ? (
-              <div className="text-zinc-500 text-xs text-center italic">No communications intercepted...</div>
+            {messages.filter(m => m.type !== 'ChatMessage').length === 0 ? (
+              <div className="text-zinc-500 text-xs text-center italic">No system events recorded...</div>
             ) : (
-              messages.map((m, i) => (
+              messages.filter(m => m.type !== 'ChatMessage').map((m, i) => (
                 <TickerEvent key={i} event={m} />
               ))
             )}
-          </div>
-          <div className="p-3 border-t border-green-500/20 bg-black/60">
-            <input 
-              type="text" 
-              placeholder="Transmit message... (Press Enter)" 
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={handleSendMessage}
-              className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-xs outline-none focus:border-green-500/50 transition-colors" 
-            />
           </div>
         </div>
       </aside>

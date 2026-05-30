@@ -15,9 +15,10 @@ type Post = {
   author_name: string;
   faction_name: string | null;
   is_anonymous: boolean | null;
-  user_id: string;
+  user_id: string | null;
   reply_count: number;
   has_boosted: boolean;
+  created_at: string;
 };
 
 type Comment = {
@@ -25,6 +26,7 @@ type Comment = {
   post_id: string;
   content: string;
   author_name: string;
+  created_at: string;
 };
 
 export default function Dashboard() {
@@ -64,9 +66,10 @@ export default function Dashboard() {
           author_name: newPost.is_anonymous ? 'Anonymous' : (user?.username || 'phantom'),
           faction_name: newPost.is_anonymous ? null : (user?.faction_name || null),
           is_anonymous: newPost.is_anonymous,
-          user_id: user?.id || 'temp',
+          user_id: user?.id || null,
           reply_count: 0,
           has_boosted: false,
+          created_at: new Date().toISOString(),
         };
         return old ? [optimisticPost, ...old] : [optimisticPost];
       });
@@ -85,7 +88,8 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
     },
     onSuccess: () => {
-      toast.success('Broadcast transmitted');
+      setContent('');
+      toast.success('Broadcast sent');
     },
   });
 
@@ -147,7 +151,8 @@ export default function Dashboard() {
             <PostCard 
               key={post.id}
               post={post}
-              isMine={user?.id === post.user_id}
+              isMine={user && user.id === post.user_id}
+              isAnonymousUser={!user}
             />
           ))
         )}
@@ -156,7 +161,7 @@ export default function Dashboard() {
   );
 }
 
-function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
+function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boolean, isAnonymousUser?: boolean }) {
   const queryClient = useQueryClient();
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -226,7 +231,9 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">{displayFaction}</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-600">Just now</span>
+          <span className="text-xs text-zinc-600">
+            {post.created_at ? new Date(post.created_at).toLocaleString() : 'Just now'}
+          </span>
           {isMine && (
             <button onClick={() => deleteMutation.mutate()} className="text-zinc-600 hover:text-red-500 transition-colors">
               <Trash2 size={14} />
@@ -238,7 +245,13 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
       <div className="flex justify-between items-center pt-3 border-t border-zinc-900/50">
         <div className="flex gap-4">
           <button 
-            onClick={() => boostMutation.mutate()} 
+            onClick={() => {
+              if (isAnonymousUser) {
+                toast.error("Anonymous Operatives cannot boost transmissions. Create an identity first.");
+                return;
+              }
+              boostMutation.mutate();
+            }} 
             disabled={boostMutation.isPending || post.has_boosted}
             className={`flex items-center gap-1.5 text-xs transition-colors ${post.has_boosted ? 'text-green-500 font-bold cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
           >
@@ -259,9 +272,12 @@ function PostCard({ post, isMine }: { post: Post, isMine: boolean }) {
       {showComments && (
         <div className="mt-4 pt-4 border-t border-zinc-800/50 space-y-3 pl-4 border-l-2 border-zinc-800">
           {comments?.map(c => (
-            <div key={c.id} className="text-xs">
-              <span className="font-bold text-zinc-400 mr-2">@{c.author_name}</span>
-              <span className="text-zinc-300">{c.content}</span>
+            <div key={c.id} className="text-xs flex justify-between">
+              <div>
+                <span className="font-bold text-zinc-400 mr-2">@{c.author_name}</span>
+                <span className="text-zinc-300">{c.content}</span>
+              </div>
+              <span className="text-[10px] text-zinc-600">{c.created_at ? new Date(c.created_at).toLocaleString() : ''}</span>
             </div>
           ))}
           <div className="flex gap-2 mt-2">

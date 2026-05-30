@@ -23,10 +23,23 @@ type FactionMember = {
   influence: number;
 };
 
+type Territory = {
+  id: string;
+  name: string;
+  controlling_faction_id: string | null;
+  defense_score: number;
+};
+
+type InventoryItem = {
+  item_id: string;
+  quantity: number;
+};
+
 export default function FactionHubPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
   const { user } = useUser();
   const [isDeclaringWar, setIsDeclaringWar] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   const { data: faction, isLoading } = useQuery<Faction>({
     queryKey: ['faction', unwrappedParams.id],
@@ -46,7 +59,40 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
     },
   });
 
+  const { data: territories } = useQuery<Territory[]>({
+    queryKey: ['territories'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/territories');
+      if (!res.ok) throw new Error('Network response was not ok');
+      return res.json();
+    },
+  });
+
+  const { data: inventory } = useQuery<InventoryItem[]>({
+    queryKey: ['inventory'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/blackmarket/inventory');
+      if (!res.ok) throw new Error('Network response was not ok');
+      return res.json();
+    },
+    enabled: !!user?.faction_name, // Only fetch if we're authenticated
+  });
+
+  const factionTerritories = territories?.filter(t => t.controlling_faction_id === faction?.id) || [];
   const isMyFaction = user?.faction_name === faction?.name;
+
+  const handleLeaveFaction = async () => {
+    setIsLeaving(true);
+    try {
+      const res = await apiFetch('/api/factions/leave', { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to leave faction');
+      toast.success('You have left the faction.');
+      setTimeout(() => { window.location.href = '/factions'; }, 1000);
+    } catch {
+      toast.error('Failed to leave faction.');
+      setIsLeaving(false);
+    }
+  };
 
   const handleInvade = () => {
     setIsDeclaringWar(true);
@@ -125,6 +171,58 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                   <div>
                     <h3 className="text-green-500 font-bold uppercase tracking-widest mb-1">Headquarters</h3>
                     <p className="text-sm text-zinc-500">This is your syndicate. Protect your influence and expand your territory.</p>
+                  </div>
+                  <button 
+                    onClick={handleLeaveFaction}
+                    disabled={isLeaving}
+                    className="px-6 py-3 bg-red-500/10 text-red-500 border border-red-500/50 rounded font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
+                  >
+                    {isLeaving ? 'Processing...' : 'Leave Faction'}
+                  </button>
+                </div>
+              )}
+
+              {/* Faction Territories */}
+              <div className="border border-zinc-800 bg-black/40 rounded mt-6">
+                <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Controlled Territories</h3>
+                  <span className="text-xs text-zinc-500">{factionTerritories.length} Zones</span>
+                </div>
+                <div className="p-4">
+                  {factionTerritories.length === 0 ? (
+                    <div className="text-center text-zinc-500 text-xs py-4">No territories currently controlled.</div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {factionTerritories.map(t => (
+                        <div key={t.id} className="p-3 border border-zinc-800/50 bg-black/60 rounded">
+                          <h4 className="font-bold text-zinc-300">{t.name}</h4>
+                          <div className="text-xs text-zinc-500 mt-1">DEF: <span className="text-blue-400 font-bold">{t.defense_score}</span></div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Faction Ammo (Inventory) - Only shown to faction members */}
+              {isMyFaction && (
+                <div className="border border-zinc-800 bg-black/40 rounded mt-6">
+                  <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+                    <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Faction Ammo (Inventory)</h3>
+                  </div>
+                  <div className="p-4">
+                    {!inventory || inventory.length === 0 ? (
+                      <div className="text-center text-zinc-500 text-xs py-4">Arsenal is empty. Visit the Black Market.</div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {inventory.map(item => (
+                          <div key={item.item_id} className="flex justify-between items-center p-3 border border-zinc-800/50 bg-black/60 rounded">
+                            <span className="text-sm font-bold text-zinc-300 uppercase">{item.item_id.replace('_', ' ')}</span>
+                            <span className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">x{item.quantity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -109,6 +109,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NavItem href="/territory" icon={<MapIcon size={18} />} label="Territory" active={pathname === '/territory'} />
             <NavItem href="/factions" icon={<Shield size={18} />} label="Factions" active={pathname.startsWith('/factions')} />
             <NavItem href="/comms" icon={<MessageSquare size={18} />} label="Comms" active={pathname === '/comms'} />
+            <NavItem href="/notifications" icon={<Bell size={18} />} label="Alerts" active={pathname === '/notifications'} />
             <NavItem href="/black-market" icon={<Zap size={18} />} label="Black Market" active={pathname === '/black-market'} />
             <NavItem href="/profile" icon={<User size={18} />} label="Profile" active={pathname === '/profile'} />
           </nav>

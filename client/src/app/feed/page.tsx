@@ -151,7 +151,7 @@ export default function Dashboard() {
             <PostCard 
               key={post.id}
               post={post}
-              isMine={user && user.id === post.user_id}
+              isMine={!!user && user.id === post.user_id}
               isAnonymousUser={!user}
             />
           ))

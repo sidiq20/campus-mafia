@@ -201,6 +201,7 @@ async fn main() {
                 if let Ok(origin_str) = origin.to_str() {
                     origin_str == "http://localhost:3000"
                         || origin_str.ends_with(".vercel.app")
+                        || origin_str.ends_with(".leapcell.dev")
                 } else {
                     false
                 }

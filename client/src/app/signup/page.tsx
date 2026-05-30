@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Skull, Mail, User, KeyRound, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { API_URL } from '@/lib/api';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function SignupPage() {
     setLoading(true);
     
     try {
-      const res = await fetch('https://campus-mafia-sidiqolasode5695-s7vx2lv9.leapcell.dev/api/auth/register', {
+      const res = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'true' === 'true' ? 'include' : 'same-origin', // include cookies

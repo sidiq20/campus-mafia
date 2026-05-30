@@ -93,7 +93,8 @@ pub async fn register(
     let cookie = Cookie::build(("jwt", token))
         .path("/")
         .http_only(true)
-        .same_site(axum_extra::extract::cookie::SameSite::Lax)
+        .secure(true)
+        .same_site(axum_extra::extract::cookie::SameSite::None)
         .build();
 
     Ok((
@@ -142,7 +143,8 @@ pub async fn login(
     let cookie = Cookie::build(("jwt", token))
         .path("/")
         .http_only(true)
-        .same_site(axum_extra::extract::cookie::SameSite::Lax)
+        .secure(true)
+        .same_site(axum_extra::extract::cookie::SameSite::None)
         .build();
 
     Ok((
@@ -152,10 +154,14 @@ pub async fn login(
 }
 
 pub async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
-    let mut cookie = Cookie::new("jwt", "");
-    cookie.set_path("/");
-    cookie.make_removal();
-    (jar.add(cookie), Json(serde_json::json!({ "message": "Logged out" })))
+    let cookie = Cookie::build(("jwt", ""))
+        .path("/")
+        .http_only(true)
+        .secure(true)
+        .same_site(axum_extra::extract::cookie::SameSite::None)
+        .build();
+    let jar = jar.add(cookie);
+    (jar, Json(serde_json::json!({ "message": "Logged out" })))
 }
 
 pub struct AuthUser {

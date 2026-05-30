@@ -6,7 +6,7 @@ import { MessageSquare, Lock, Send } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { API_URL, WS_URL } from '@/lib/api';
+import { apiFetch, WS_URL } from '@/lib/api';
 
 type ChatMessage = {
   id: string;
@@ -35,13 +35,11 @@ export default function CommsPage() {
     queryKey: ['chat', activeChannel],
     queryFn: async () => {
       if (!activeChannel) return [];
-      const endpoint = activeChannel === 'global' 
-        ? `${API_URL}/api/comms/global`
-        : `${API_URL}/api/comms/faction/${user?.faction_id}`;
+      const path = activeChannel === 'global' 
+        ? '/api/comms/global'
+        : `/api/comms/faction/${user?.faction_id}`;
       
-      const res = await fetch(endpoint, {
-        credentials: 'true' === 'true' ? 'include' : 'same-origin',
-      });
+      const res = await apiFetch(path);
       if (!res.ok) throw new Error('Failed to load comms');
       return res.json();
     },
@@ -51,14 +49,13 @@ export default function CommsPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const endpoint = activeChannel === 'global' 
-        ? `${API_URL}/api/comms/global`
-        : `${API_URL}/api/comms/faction/${user?.faction_id}`;
+      const path = activeChannel === 'global' 
+        ? '/api/comms/global'
+        : `/api/comms/faction/${user?.faction_id}`;
         
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'true' === 'true' ? 'include' : 'same-origin',
         body: JSON.stringify({ content })
       });
       if (!res.ok) throw new Error('Transmission failed');

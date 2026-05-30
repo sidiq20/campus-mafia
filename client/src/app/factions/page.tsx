@@ -4,7 +4,7 @@ import { Shield, Users, ArrowRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import Link from 'next/link';
-import { API_URL } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 type Faction = {
   id: string;
@@ -18,9 +18,7 @@ export default function FactionsPage() {
   const { data: factions, isLoading } = useQuery<Faction[]>({
     queryKey: ['factions'],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/factions`, {
-        credentials: 'true' === 'true' ? 'include' : 'same-origin',
-      });
+      const res = await apiFetch('/api/factions');
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },

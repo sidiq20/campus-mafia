@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { API_URL } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 export type UserProfile = {
   id: string;
@@ -29,15 +29,13 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const { data: user, isLoading } = useQuery<UserProfile>({
     queryKey: ['me'],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/auth/me`, {
-        credentials: 'true' === 'true' ? 'include' : 'same-origin',
-      });
+      const res = await apiFetch('/api/auth/me');
       if (!res.ok) {
         throw new Error('Not authenticated');
       }
       return res.json();
     },
-    retry: false, // Don't retry if unauthenticated
+    retry: false,
   });
 
   return (

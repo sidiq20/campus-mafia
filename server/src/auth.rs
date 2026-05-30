@@ -90,16 +90,9 @@ pub async fn register(
 
     let token = create_jwt(user_id).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    let cookie = Cookie::build(("jwt", token))
-        .path("/")
-        .http_only(true)
-        .secure(true)
-        .same_site(axum_extra::extract::cookie::SameSite::None)
-        .build();
-
     Ok((
-        jar.add(cookie),
-        Json(serde_json::json!({ "user_id": user_id, "username": payload.username })),
+        jar,
+        Json(serde_json::json!({ "user_id": user_id, "username": payload.username, "token": token })),
     ))
 }
 
@@ -140,16 +133,9 @@ pub async fn login(
 
     let token = create_jwt(record.id).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    let cookie = Cookie::build(("jwt", token))
-        .path("/")
-        .http_only(true)
-        .secure(true)
-        .same_site(axum_extra::extract::cookie::SameSite::None)
-        .build();
-
     Ok((
-        jar.add(cookie),
-        Json(serde_json::json!({ "user_id": record.id, "username": payload.username })),
+        jar,
+        Json(serde_json::json!({ "user_id": record.id, "username": payload.username, "token": token })),
     ))
 }
 
@@ -176,20 +162,34 @@ where
     type Rejection = (StatusCode, &'static str);
 
     async fn from_request_parts(parts: &mut axum::http::request::Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "secret".into());
+
+        // Try Authorization: Bearer <token> header first
+        if let Some(auth_header) = parts.headers.get("authorization") {
+            if let Ok(auth_str) = auth_header.to_str() {
+                if let Some(token_str) = auth_str.strip_prefix("Bearer ") {
+                    let token = decode::<Claims>(
+                        token_str,
+                        &DecodingKey::from_secret(secret.as_bytes()),
+                        &Validation::default(),
+                    ).map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token"))?;
+                    return Ok(AuthUser { user_id: token.claims.sub });
+                }
+            }
+        }
+
+        // Fall back to cookie
         let jar = CookieJar::from_request_parts(parts, state).await.unwrap_or_default();
-        
         if let Some(cookie) = jar.get("jwt") {
-            let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "secret".into());
             let token = decode::<Claims>(
                 cookie.value(),
                 &DecodingKey::from_secret(secret.as_bytes()),
                 &Validation::default(),
             ).map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token"))?;
-            
-            Ok(AuthUser { user_id: token.claims.sub })
-        } else {
-            Err((StatusCode::UNAUTHORIZED, "Missing token"))
+            return Ok(AuthUser { user_id: token.claims.sub });
         }
+
+        Err((StatusCode::UNAUTHORIZED, "Missing token"))
     }
 }
 

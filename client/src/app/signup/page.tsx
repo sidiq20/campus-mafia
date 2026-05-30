@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Skull, Mail, User, KeyRound, Building2, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
-import { API_URL } from '@/lib/api';
+import { API_URL, setToken } from '@/lib/api';
 
 export default function SignupPage() {
   const [loading, setLoading] = useState(false);
@@ -21,11 +21,12 @@ export default function SignupPage() {
       const res = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(formData),
       });
       
       if (res.ok) {
+        const data = await res.json();
+        setToken(data.token);
         setSuccess(true);
         setTimeout(() => {
           window.location.href = '/feed';

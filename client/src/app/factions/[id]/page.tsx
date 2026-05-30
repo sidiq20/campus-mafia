@@ -7,7 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
-import { API_URL } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 type Faction = {
   id: string;
@@ -31,9 +31,7 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
   const { data: faction, isLoading } = useQuery<Faction>({
     queryKey: ['faction', unwrappedParams.id],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/factions/${unwrappedParams.id}`, {
-        credentials: 'true' === 'true' ? 'include' : 'same-origin',
-      });
+      const res = await apiFetch(`/api/factions/${unwrappedParams.id}`);
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
@@ -42,9 +40,7 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
   const { data: members, isLoading: isLoadingMembers } = useQuery<FactionMember[]>({
     queryKey: ['faction-members', unwrappedParams.id],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/factions/${unwrappedParams.id}/members`, {
-        credentials: 'true' === 'true' ? 'include' : 'same-origin',
-      });
+      const res = await apiFetch(`/api/factions/${unwrappedParams.id}/members`);
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },

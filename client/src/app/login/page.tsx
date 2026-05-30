@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Skull, ShieldAlert, KeyRound, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
-import { API_URL } from '@/lib/api';
+import { API_URL, setToken } from '@/lib/api';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -21,13 +21,13 @@ export default function LoginPage() {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(formData),
       });
       
       if (res.ok) {
+        const data = await res.json();
+        setToken(data.token);
         setSuccess(true);
-        // Give user visual feedback before redirecting
         setTimeout(() => {
           window.location.href = '/feed';
         }, 1200);

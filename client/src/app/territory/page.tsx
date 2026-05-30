@@ -1,7 +1,7 @@
 "use client";
 
 import DashboardLayout from '@/components/DashboardLayout';
-import { API_URL } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import { Shield, Target, Crosshair, Users } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -19,19 +19,16 @@ export default function TerritoryPage() {
   const { data: territories, isLoading } = useQuery<Territory[]>({
     queryKey: ['territories'],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/territories`, {
-        credentials: 'true' === 'true' ? 'include' : 'same-origin',
-      });
+      const res = await apiFetch('/api/territories');
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
   });
   const attackMutation = useMutation({
     mutationFn: async (territoryId: string) => {
-      const res = await fetch(`${API_URL}/api/territories/${territoryId}/attack`, {
+      const res = await apiFetch(`/api/territories/${territoryId}/attack`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'true' === 'true' ? 'include' : 'same-origin',
         body: JSON.stringify({ influence_spent: 10 })
       });
       if (!res.ok) {

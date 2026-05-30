@@ -1,42 +1,11 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+// Middleware is disabled for cross-domain cookie setup.
+// Auth protection is handled client-side via useUser() in DashboardLayout.
+// This file is kept empty intentionally.
 
-export function middleware(request: NextRequest) {
-  // Check if the JWT cookie exists
-  const token = request.cookies.get('jwt')
-  const { pathname } = request.nextUrl
-  
-  // Define routes that require authentication
-  const protectedRoutes = ['/feed', '/territory', '/comms', '/black-market', '/factions', '/profile']
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
-
-  if (isProtectedRoute && !token) {
-    // Redirect unauthenticated users to login
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  // Define routes meant only for unauthenticated users
-  const authRoutes = ['/login', '/signup']
-  const isAuthRoute = authRoutes.some(route => pathname.startsWith(route))
-  
-  if (isAuthRoute && token) {
-    // Redirect already authenticated users to their dashboard (feed)
-    return NextResponse.redirect(new URL('/feed', request.url))
-  }
-
-  return NextResponse.next()
+export default function middleware() {
+  // no-op
 }
 
 export const config = {
-  // Apply middleware only to these specific paths to optimize performance
-  matcher: [
-    '/feed/:path*',
-    '/territory/:path*',
-    '/comms/:path*',
-    '/black-market/:path*',
-    '/factions/:path*',
-    '/profile/:path*',
-    '/login',
-    '/signup'
-  ]
-}
+  matcher: [],
+};

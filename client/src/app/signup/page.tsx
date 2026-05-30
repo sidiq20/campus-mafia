@@ -1,38 +1,41 @@
 "use client";
 
 import { useState } from 'react';
-import { Skull, Mail, User, KeyRound, Building2 } from 'lucide-react';
+import { Skull, Mail, User, KeyRound, Building2, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { API_URL } from '@/lib/api';
 
 export default function SignupPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   const [formData, setFormData] = useState({ username: '', email: '', faction_name: '', password: '' });
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     
     try {
       const res = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'true' === 'true' ? 'include' : 'same-origin', // include cookies
+        credentials: 'include',
         body: JSON.stringify(formData),
       });
       
       if (res.ok) {
-        router.push('/feed');
+        setSuccess(true);
+        setTimeout(() => {
+          window.location.href = '/feed';
+        }, 1200);
       } else {
         const err = await res.text();
-        alert('Signup failed: ' + err);
+        setError(err || 'Registration failed');
       }
-    } catch (e) {
-      console.error(e);
-      alert('Network error');
+    } catch {
+      setError('Network error — backend may be offline');
     } finally {
       setLoading(false);
     }
@@ -54,6 +57,23 @@ export default function SignupPage() {
         </div>
 
         <form onSubmit={handleSignup} className="space-y-4">
+          {/* Success State */}
+          {success && (
+            <div className="p-4 border border-purple-500/50 bg-purple-500/10 rounded flex items-center gap-3 animate-pulse">
+              <CheckCircle className="text-purple-400 w-5 h-5 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-purple-400">Clearance Granted</p>
+                <p className="text-xs text-purple-500/70">Redirecting to dashboard...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="p-3 border border-red-500/30 bg-red-500/10 rounded">
+              <p className="text-xs text-red-400">{error}</p>
+            </div>
+          )}
           <div>
             <label className="block text-xs text-purple-500 uppercase tracking-widest mb-1.5">Netrunner Alias</label>
             <div className="relative flex items-center">
@@ -121,10 +141,14 @@ export default function SignupPage() {
 
           <button 
             type="submit" 
-            disabled={loading}
-            className="w-full mt-6 py-3 bg-purple-500/10 text-purple-500 border border-purple-500/30 rounded text-sm font-bold uppercase tracking-wider hover:bg-purple-500/20 transition-all disabled:opacity-50 hover:shadow-[0_0_15px_rgba(168,85,247,0.3)]"
+            disabled={loading || success}
+            className={`w-full mt-6 py-3 rounded text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-50 ${
+              success
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50 shadow-[0_0_20px_rgba(168,85,247,0.3)]'
+                : 'bg-purple-500/10 text-purple-500 border border-purple-500/30 hover:bg-purple-500/20 hover:shadow-[0_0_15px_rgba(168,85,247,0.3)]'
+            }`}
           >
-            {loading ? 'Encrypting...' : 'Submit Clearance'}
+            {success ? '✓ Clearance Granted' : loading ? 'Encrypting...' : 'Submit Clearance'}
           </button>
         </form>
 

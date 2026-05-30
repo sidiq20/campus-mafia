@@ -1,38 +1,42 @@
 "use client";
 
 import { useState } from 'react';
-import { Skull, ShieldAlert, KeyRound } from 'lucide-react';
+import { Skull, ShieldAlert, KeyRound, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { API_URL } from '@/lib/api';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   const [formData, setFormData] = useState({ username: '', password: '' });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'true' === 'true' ? 'include' : 'same-origin', // include cookies
+        credentials: 'include',
         body: JSON.stringify(formData),
       });
       
       if (res.ok) {
-        router.push('/feed');
+        setSuccess(true);
+        // Give user visual feedback before redirecting
+        setTimeout(() => {
+          window.location.href = '/feed';
+        }, 1200);
       } else {
         const err = await res.text();
-        alert('Login failed: ' + err);
+        setError(err || 'Invalid credentials');
       }
-    } catch (e) {
-      console.error(e);
-      alert('Network error');
+    } catch {
+      setError('Network error — backend may be offline');
     } finally {
       setLoading(false);
     }
@@ -53,6 +57,24 @@ export default function LoginPage() {
           <p className="text-xs text-zinc-500 uppercase tracking-widest mt-1">Authorized Personnel Only</p>
         </div>
 
+        {/* Success State */}
+        {success && (
+          <div className="mb-6 p-4 border border-green-500/50 bg-green-500/10 rounded flex items-center gap-3 animate-pulse">
+            <CheckCircle className="text-green-500 w-5 h-5 shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-green-400">Identity Verified</p>
+              <p className="text-xs text-green-500/70">Redirecting to dashboard...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="mb-6 p-3 border border-red-500/30 bg-red-500/10 rounded">
+            <p className="text-xs text-red-400">{error}</p>
+          </div>
+        )}
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-xs text-green-500 uppercase tracking-widest mb-1.5">Alias or Email</label>
@@ -61,9 +83,10 @@ export default function LoginPage() {
               <input 
                 type="text" 
                 required
+                disabled={success}
                 value={formData.username}
                 onChange={e => setFormData({...formData, username: e.target.value})}
-                className="w-full bg-zinc-950/50 border border-zinc-800 rounded pl-10 pr-4 py-2.5 text-sm focus:border-green-500/50 outline-none transition-colors"
+                className="w-full bg-zinc-950/50 border border-zinc-800 rounded pl-10 pr-4 py-2.5 text-sm focus:border-green-500/50 outline-none transition-colors disabled:opacity-50"
                 placeholder="Enter alias or email..."
               />
             </div>
@@ -76,9 +99,10 @@ export default function LoginPage() {
               <input 
                 type="password" 
                 required
+                disabled={success}
                 value={formData.password}
                 onChange={e => setFormData({...formData, password: e.target.value})}
-                className="w-full bg-zinc-950/50 border border-zinc-800 rounded pl-10 pr-4 py-2.5 text-sm focus:border-green-500/50 outline-none transition-colors"
+                className="w-full bg-zinc-950/50 border border-zinc-800 rounded pl-10 pr-4 py-2.5 text-sm focus:border-green-500/50 outline-none transition-colors disabled:opacity-50"
                 placeholder="••••••••"
               />
             </div>
@@ -86,10 +110,14 @@ export default function LoginPage() {
 
           <button 
             type="submit" 
-            disabled={loading}
-            className="w-full mt-6 py-3 bg-green-500/10 text-green-500 border border-green-500/30 rounded text-sm font-bold uppercase tracking-wider hover:bg-green-500/20 transition-all disabled:opacity-50 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)]"
+            disabled={loading || success}
+            className={`w-full mt-6 py-3 rounded text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-50 ${
+              success 
+                ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.3)]'
+                : 'bg-green-500/10 text-green-500 border border-green-500/30 hover:bg-green-500/20 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+            }`}
           >
-            {loading ? 'Authenticating...' : 'Initialize Uplink'}
+            {success ? '✓ Access Granted' : loading ? 'Authenticating...' : 'Initialize Uplink'}
           </button>
         </form>
 

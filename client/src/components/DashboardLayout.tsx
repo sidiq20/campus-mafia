@@ -11,7 +11,7 @@ import { WS_URL } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user } = useUser();
+  const { user, isLoading } = useUser();
   const [messages, setMessages] = useState<{type: string, [key: string]: any}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isLeftOpen, setIsLeftOpen] = useState(false);
@@ -62,6 +62,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     }
   };
+  // Client-side auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      window.location.href = '/login';
+    }
+  }, [isLoading, user]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-[#09090b] text-zinc-100 font-mono">
+        <div className="text-center">
+          <div className="text-green-500 text-sm animate-pulse uppercase tracking-widest">Initializing Secure Uplink...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null; // Will redirect via useEffect above
+  }
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-[#09090b] text-zinc-100 overflow-hidden font-mono">

@@ -21,7 +21,7 @@ export default function LandingPage() {
           The campus is no longer just a school. It's a battleground. Join a faction, control territory, spread propaganda, and dominate the digital underworld of your university.
         </p>
         
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
           <Link 
             href="/signup" 
             className="flex items-center gap-2 px-8 py-4 bg-green-500/10 text-green-500 border border-green-500/50 rounded text-sm font-bold uppercase tracking-widest hover:bg-green-500/20 hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all"
@@ -36,6 +36,41 @@ export default function LandingPage() {
           >
             Terminal Access
           </Link>
+        </div>
+
+        {/* How to Play Section */}
+        <div className="text-left border border-zinc-800 bg-black/60 backdrop-blur-md p-8 rounded-lg mb-20 max-w-4xl mx-auto">
+          <h2 className="text-2xl font-bold text-green-500 uppercase tracking-widest mb-6 border-b border-zinc-800 pb-4">Operator Briefing // How to Play</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              <h3 className="text-lg font-bold text-zinc-200 mb-2">1. Choose Your Faction</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Align yourself with a powerful syndicate. Your faction dictates your encrypted comms and shared territory control. Work together or fall alone.
+              </p>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-bold text-zinc-200 mb-2">2. Gain Influence (INF)</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Influence is the currency of the underground. Broadcast intel on the global feed, get boosted by allies, and interact to farm INF.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-zinc-200 mb-2">3. Control Territories</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Spend INF to launch cyber-attacks on rival campus zones. Coordinate with your faction to break high-defense firewalls and claim the territory.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-zinc-200 mb-2">4. Access the Black Market</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Use your INF to buy tactical advantages: DDoS attacks, Identity Scramblers for anonymous posting, or Firewall upgrades to defend your turf.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
       

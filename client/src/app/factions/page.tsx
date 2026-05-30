@@ -4,6 +4,7 @@ import { Shield, Users, ArrowRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 
 type Faction = {
@@ -37,6 +38,12 @@ export default function FactionsPage() {
               <h1 className="text-2xl font-bold text-zinc-100">Registered Syndicates</h1>
               <p className="text-sm text-zinc-500 mt-1">Directory of all active campus factions.</p>
             </div>
+            <button 
+              onClick={() => toast.error('Clearance Level Too Low. Contact an Admin to register a new Syndicate.')}
+              className="px-4 py-2 bg-green-500/10 text-green-500 border border-green-500/30 rounded text-xs font-bold uppercase hover:bg-green-500/20 transition-colors"
+            >
+              + Create Faction
+            </button>
           </div>
 
           {isLoading ? (

@@ -3,14 +3,17 @@
 import DashboardLayout from '@/components/DashboardLayout';
 import { Zap, Tag, Skull, Fingerprint } from 'lucide-react';
 
+import { useUser } from '@/contexts/UserContext';
+
 export default function BlackMarketPage() {
+  const { user } = useUser();
   return (
     <DashboardLayout>
       <header className="h-14 border-b border-green-500/20 flex items-center px-6 bg-black/40 backdrop-blur-md">
         <h2 className="text-sm font-semibold text-green-500 uppercase tracking-widest">Black Market // Contraband</h2>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-zinc-500 font-mono">Available Funds:</span>
-          <span className="text-xs font-bold text-yellow-500">1,204 INF</span>
+          <span className="text-xs font-bold text-yellow-500">{user?.influence || 0} INF</span>
         </div>
       </header>
       

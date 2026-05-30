@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User } from 'lucide-react';
+import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { Toaster, toast } from 'sonner';
 import PwaInstallBanner from './PwaInstallBanner';
-import { WS_URL } from '@/lib/api';
+import { WS_URL, clearToken } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, isLoading } = useUser();
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<{type: string, [key: string]: any}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isLeftOpen, setIsLeftOpen] = useState(false);
@@ -128,6 +130,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-zinc-400">Reputation</span>
             <span className="text-blue-500">{user?.reputation || 0}</span>
           </div>
+          <button 
+            onClick={() => {
+              clearToken();
+              queryClient.clear();
+              window.location.href = '/login';
+            }}
+            className="w-full mt-4 py-2 border border-red-500/30 text-red-500/70 hover:text-red-500 hover:bg-red-500/10 rounded flex items-center justify-center gap-2 text-xs uppercase font-bold transition-colors"
+          >
+            <LogOut size={14} />
+            Disconnect
+          </button>
         </div>
       </aside>
 

@@ -87,6 +87,20 @@ pub async fn attack_territory(
 
     let mut tx = pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Check DDoS
+    let is_ddosed: Option<bool> = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'faction' AND target_id = $1 AND effect_id = 'ddos_attack' AND expires_at > NOW())"
+    )
+    .bind(user_faction)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    if is_ddosed.unwrap_or(false) {
+        return Err((StatusCode::BAD_REQUEST, "Your faction is under a DDoS attack. You cannot launch territory attacks.".to_string()));
+    }
+
     // Deduct influence
     sqlx::query("UPDATE users SET influence = influence - $1 WHERE id = $2")
         .bind(payload.influence_spent)

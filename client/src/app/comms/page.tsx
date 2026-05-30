@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { MessageSquare, Lock, Send } from 'lucide-react';
+import { MessageSquare, Lock, Send, ArrowLeft } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -141,7 +141,7 @@ export default function CommsPage() {
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
         
         {/* Sidebar Channels List */}
-        <div className="w-full md:w-1/3 h-48 md:h-auto border-b md:border-b-0 md:border-r border-zinc-800 bg-black/40 flex flex-col p-4 gap-4 overflow-y-auto shrink-0">
+        <div className={`w-full md:w-1/3 md:h-auto border-r border-zinc-800 bg-black/40 flex-col p-4 gap-4 overflow-y-auto shrink-0 ${activeChannel ? 'hidden md:flex' : 'flex'}`}>
           <h3 className="text-xs text-zinc-500 uppercase tracking-widest mb-2 hidden md:block">Available Frequencies</h3>
           
           <div 
@@ -185,7 +185,7 @@ export default function CommsPage() {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col bg-black/20 min-h-0">
+        <div className={`flex-1 flex-col bg-black/20 min-h-0 ${!activeChannel ? 'hidden md:flex' : 'flex'}`}>
           {!activeChannel ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
@@ -195,6 +195,17 @@ export default function CommsPage() {
             </div>
           ) : (
             <>
+              {/* Mobile Back Button */}
+              <div className="md:hidden flex items-center p-3 border-b border-zinc-800 bg-black/60">
+                <button 
+                  onClick={() => setActiveChannel(null)}
+                  className="text-zinc-400 hover:text-green-500 flex items-center gap-2 text-sm uppercase tracking-widest font-bold"
+                >
+                  <ArrowLeft size={16} />
+                  Back to Channels
+                </button>
+              </div>
+              
               {/* Messages Area */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {isLoading ? (

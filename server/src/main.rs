@@ -16,6 +16,7 @@ use auth::AuthUser;
 mod social;
 mod game;
 mod comms;
+mod blackmarket;
 
 mod ws;
 use std::sync::Arc;
@@ -85,8 +86,21 @@ async fn create_post(
     .await
     .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Reward user with 10 influence
-    let _ = sqlx::query("UPDATE users SET influence = influence + 10 WHERE id = $1")
+    // Check for propaganda boost
+    let has_propaganda_boost: Option<bool> = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'propaganda_boost' AND expires_at > NOW())"
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    let inf_reward = if has_propaganda_boost.unwrap_or(false) { 20 } else { 10 };
+
+    // Reward user with influence
+    let _ = sqlx::query("UPDATE users SET influence = influence + $1 WHERE id = $2")
+        .bind(inf_reward)
         .bind(user_id)
         .execute(pool)
         .await;
@@ -274,6 +288,11 @@ async fn main() {
             axum::routing::post(comms::send_faction_chat)
                 .get(comms::get_faction_chat),
         )
+
+        // Black Market
+        .route("/api/blackmarket/inventory", get(blackmarket::get_inventory))
+        .route("/api/blackmarket/purchase", axum::routing::post(blackmarket::purchase_item))
+        .route("/api/blackmarket/use", axum::routing::post(blackmarket::use_item))
 
         // Websocket
         .route("/api/ws", get(ws::ws_handler))

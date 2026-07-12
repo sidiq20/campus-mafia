@@ -270,6 +270,68 @@ pub async fn create_faction(
     Ok(Json(serde_json::json!({"status": "success", "faction_id": faction_id})))
 }
 
+pub async fn join_faction(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(faction_id): Path<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    // Check user's current faction and last faction change
+    #[derive(sqlx::FromRow)]
+    struct UserData {
+        faction_id: Option<uuid::Uuid>,
+        last_faction_change: Option<chrono::DateTime<chrono::Utc>>,
+    }
+
+    let user_data = sqlx::query_as::<_, UserData>(
+        "SELECT faction_id, last_faction_change FROM users WHERE id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Check if already in a faction
+    if user_data.faction_id.is_some() {
+        return Err((StatusCode::BAD_REQUEST, "You must leave your current faction before joining a new one.".to_string()));
+    }
+
+    // Check cooldown
+    if let Some(last_change) = user_data.last_faction_change {
+        let now = chrono::Utc::now();
+        if now.signed_duration_since(last_change).num_days() < 5 {
+            return Err((StatusCode::BAD_REQUEST, "You must wait 5 days between changing factions.".to_string()));
+        }
+    }
+
+    // Verify faction exists
+    let faction_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM factions WHERE id = $1)"
+    )
+    .bind(faction_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
+
+    if !faction_exists {
+        return Err((StatusCode::NOT_FOUND, "Faction not found".to_string()));
+    }
+
+    // Update user's faction
+    sqlx::query(
+        "UPDATE users SET faction_id = $1, last_faction_change = NOW() WHERE id = $2"
+    )
+    .bind(faction_id)
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({"status": "success", "message": "Joined faction successfully"})))
+}
+
 #[derive(Serialize, sqlx::FromRow)]
 pub struct FactionResponse {
     pub id: uuid::Uuid,

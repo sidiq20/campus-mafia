@@ -280,6 +280,7 @@ async fn main() {
             axum::routing::post(game::attack_territory),
         )
         .route("/api/factions", get(game::get_factions))
+        .route("/api/factions/:id/join", axum::routing::post(game::join_faction))
         .route("/api/factions/:id", get(game::get_faction_by_id))
         .route(
             "/api/factions/:id/members",

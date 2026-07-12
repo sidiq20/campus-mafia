@@ -193,6 +193,26 @@ where
     }
 }
 
+pub struct OptionalAuthUser {
+    pub user_id: Option<uuid::Uuid>,
+}
+
+#[axum::async_trait]
+impl<S> axum::extract::FromRequestParts<S> for OptionalAuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut axum::http::request::Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let auth_result = AuthUser::from_request_parts(parts, state).await;
+        match auth_result {
+            Ok(auth_user) => Ok(OptionalAuthUser { user_id: Some(auth_user.user_id) }),
+            Err(_) => Ok(OptionalAuthUser { user_id: None }),
+        }
+    }
+}
+
 #[derive(Serialize, sqlx::FromRow)]
 pub struct UserProfile {
     pub id: uuid::Uuid,

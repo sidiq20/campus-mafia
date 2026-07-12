@@ -214,18 +214,33 @@ pub async fn create_faction(
     let pool = &state.pool;
     let user_id = auth_user.user_id;
 
-    // Check user influence
-    let user_influence: i32 = sqlx::query_scalar(
-        "SELECT COALESCE(influence, 0) FROM users WHERE id = $1"
+    // Check user influence and last faction change
+    #[derive(sqlx::FromRow)]
+    struct UserData {
+        influence: Option<i32>,
+        last_faction_change: Option<chrono::DateTime<chrono::Utc>>,
+    }
+
+    let user_data = sqlx::query_as::<_, UserData>(
+        "SELECT influence, last_faction_change FROM users WHERE id = $1"
     )
     .bind(user_id)
     .fetch_one(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    let user_influence = user_data.influence.unwrap_or(0);
+
     let cost_to_create = 500; // Expensive to create a faction
     if user_influence < cost_to_create {
         return Err((StatusCode::BAD_REQUEST, format!("Not enough influence to create a faction. Need {}, have {}", cost_to_create, user_influence)));
+    }
+
+    if let Some(last_change) = user_data.last_faction_change {
+        let now = chrono::Utc::now();
+        if now.signed_duration_since(last_change).num_days() < 5 {
+            return Err((StatusCode::BAD_REQUEST, "You must wait 5 days between changing factions.".to_string()));
+        }
     }
 
     let mut tx = pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -239,9 +254,9 @@ pub async fn create_faction(
     .await
     .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
-    // Deduct cost and set user's faction
+    // Deduct cost, set user's faction, and update last_faction_change
     sqlx::query(
-        "UPDATE users SET influence = influence - $1, faction_id = $2 WHERE id = $3"
+        "UPDATE users SET influence = influence - $1, faction_id = $2, last_faction_change = NOW() WHERE id = $3"
     )
     .bind(cost_to_create)
     .bind(faction_id)
@@ -307,7 +322,7 @@ pub async fn get_faction_by_id(
     .bind(faction_id)
     .fetch_one(pool)
     .await
-    .map_err(|e| (StatusCode::NOT_FOUND, "Faction not found".to_string()))?;
+    .map_err(|_e| (StatusCode::NOT_FOUND, "Faction not found".to_string()))?;
 
     Ok(Json(faction))
 }
@@ -342,4 +357,38 @@ pub async fn get_faction_members(
     .unwrap_or_default();
 
     Json(members)
+}
+
+pub async fn leave_faction(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    let last_change: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar("SELECT last_faction_change FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .flatten();
+
+    if let Some(last_change) = last_change {
+        let now = chrono::Utc::now();
+        if now.signed_duration_since(last_change).num_days() < 5 {
+            return Err((StatusCode::BAD_REQUEST, "You must wait 5 days between changing factions.".to_string()));
+        }
+    }
+
+    let res = sqlx::query("UPDATE users SET faction_id = NULL, last_faction_change = NOW() WHERE id = $1")
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if res.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, "User not found".to_string()));
+    }
+
+    Ok(Json(serde_json::json!({"status": "success", "message": "Left faction"})))
 }

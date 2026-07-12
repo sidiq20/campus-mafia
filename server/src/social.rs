@@ -5,7 +5,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{ServerState, auth::AuthUser};
+use crate::{ServerState, auth::{AuthUser, OptionalAuthUser}};
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct CommentResponse {
@@ -22,7 +22,7 @@ pub struct CreateCommentRequest {
 }
 
 pub async fn create_comment(
-    auth_user: AuthUser,
+    auth_user: OptionalAuthUser,
     State(state): State<ServerState>,
     Path(post_id): Path<uuid::Uuid>,
     Json(payload): Json<CreateCommentRequest>,
@@ -54,11 +54,13 @@ pub async fn create_comment(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Reward user with 2 influence for commenting
-    let _ = sqlx::query("UPDATE users SET influence = influence + 2 WHERE id = $1")
-        .bind(user_id)
-        .execute(pool)
-        .await;
+    // Reward user with 2 influence for commenting if they have an account
+    if let Some(uid) = user_id {
+        let _ = sqlx::query("UPDATE users SET influence = influence + 2 WHERE id = $1")
+            .bind(uid)
+            .execute(pool)
+            .await;
+    }
 
     Ok(Json(comment))
 }
@@ -128,4 +130,37 @@ pub async fn add_reaction(
         .await;
 
     Ok(Json(serde_json::json!({"status": "success"})))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct LeaderboardUser {
+    pub id: uuid::Uuid,
+    pub username: String,
+    pub faction_name: Option<String>,
+    pub influence: i32,
+}
+
+pub async fn get_leaderboard(
+    State(state): State<ServerState>,
+) -> Json<Vec<LeaderboardUser>> {
+    let pool = &state.pool;
+
+    let users = sqlx::query_as::<_, LeaderboardUser>(
+        r#"
+        SELECT 
+            u.id, 
+            u.username, 
+            f.name as faction_name,
+            COALESCE(u.influence, 0) as influence
+        FROM users u
+        LEFT JOIN factions f ON u.faction_id = f.id
+        ORDER BY influence DESC
+        LIMIT 10
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    Json(users)
 }

@@ -23,6 +23,17 @@ pub struct SendMessageRequest {
     pub content: String,
 }
 
+fn extract_tags(content: &str) -> Vec<String> {
+    content
+        .split_whitespace()
+        .filter(|w| w.starts_with('@') && w.len() > 1)
+        .map(|w| {
+            let w = w.trim_start_matches('@');
+            w.trim_end_matches(|c: char| !c.is_alphanumeric()).to_string()
+        })
+        .collect()
+}
+
 pub async fn get_global_chat(State(state): State<ServerState>) -> Json<Vec<ChatMessageResponse>> {
     let pool = &state.pool;
 
@@ -83,6 +94,19 @@ pub async fn send_global_chat(
     .fetch_one(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Process Tags
+    let tags = extract_tags(&payload.content);
+    for tag in tags {
+        let _ = sqlx::query(
+            "INSERT INTO notifications (user_id, content) 
+             SELECT id, $1 FROM users WHERE username = $2"
+        )
+        .bind(format!("You were mentioned in global comms by @{}", msg.author_name))
+        .bind(&tag)
+        .execute(pool)
+        .await;
+    }
 
     // Broadcast to WS
     let event = crate::ws::GameEvent::ChatMessage {
@@ -188,6 +212,19 @@ pub async fn send_faction_chat(
     .fetch_one(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Process Tags
+    let tags = extract_tags(&payload.content);
+    for tag in tags {
+        let _ = sqlx::query(
+            "INSERT INTO notifications (user_id, content) 
+             SELECT id, $1 FROM users WHERE username = $2"
+        )
+        .bind(format!("You were mentioned in faction comms by @{}", msg.author_name))
+        .bind(&tag)
+        .execute(pool)
+        .await;
+    }
 
     // Broadcast to WS
     let event = crate::ws::GameEvent::ChatMessage {

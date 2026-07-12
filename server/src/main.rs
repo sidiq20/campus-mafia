@@ -11,13 +11,13 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use serde::Serialize;
 
 mod auth;
-use auth::AuthUser;
+use auth::{AuthUser, OptionalAuthUser};
 
 mod social;
 mod game;
 mod comms;
 mod blackmarket;
-
+mod notifications;
 mod ws;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -36,9 +36,10 @@ struct PostResponse {
     author_name: String,
     faction_name: Option<String>,
     is_anonymous: Option<bool>,
-    user_id: uuid::Uuid,
+    user_id: Option<uuid::Uuid>,
     reply_count: Option<i64>,
     has_boosted: Option<bool>,
+    created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(serde::Deserialize)]
@@ -48,34 +49,35 @@ struct CreatePostRequest {
 }
 
 async fn create_post(
-    auth_user: AuthUser,
+    auth_user: OptionalAuthUser,
     State(state): State<ServerState>,
     Json(payload): Json<CreatePostRequest>,
 ) -> Result<Json<PostResponse>, (axum::http::StatusCode, String)> {
     let pool = &state.pool;
     let user_id = auth_user.user_id;
 
-    let is_anon = payload.is_anonymous.unwrap_or(false);
+    let is_anon = payload.is_anonymous.unwrap_or(false) || user_id.is_none();
 
     let post = sqlx::query_as::<_, PostResponse>(
         r#"
         WITH inserted AS (
             INSERT INTO posts (user_id, content, influence_earned, is_anonymous)
             VALUES ($1, $2, 10, $3)
-            RETURNING id, content, influence_earned, user_id, is_anonymous
+            RETURNING id, content, influence_earned, user_id, is_anonymous, created_at
         )
         SELECT 
             i.id, 
             i.content, 
             i.influence_earned, 
-            u.username as author_name, 
+            COALESCE(u.username, 'Anonymous') as author_name, 
             f.name as faction_name,
             i.is_anonymous,
             i.user_id,
-            0 as reply_count,
-            false as has_boosted
+            0::bigint as reply_count,
+            false as has_boosted,
+            i.created_at
         FROM inserted i
-        JOIN users u ON i.user_id = u.id
+        LEFT JOIN users u ON i.user_id = u.id
         LEFT JOIN factions f ON u.faction_id = f.id
         "#
     )
@@ -98,12 +100,14 @@ async fn create_post(
 
     let inf_reward = if has_propaganda_boost.unwrap_or(false) { 20 } else { 10 };
 
-    // Reward user with influence
-    let _ = sqlx::query("UPDATE users SET influence = influence + $1 WHERE id = $2")
-        .bind(inf_reward)
-        .bind(user_id)
-        .execute(pool)
-        .await;
+    // Reward user with influence if they have an account
+    if let Some(uid) = user_id {
+        let _ = sqlx::query("UPDATE users SET influence = influence + $1 WHERE id = $2")
+            .bind(inf_reward)
+            .bind(uid)
+            .execute(pool)
+            .await;
+    }
 
     let display_author = if is_anon { "Anonymous".to_string() } else { post.author_name.clone() };
 
@@ -119,7 +123,7 @@ async fn create_post(
 }
 
 async fn get_posts(
-    auth_user: AuthUser,
+    auth_user: OptionalAuthUser,
     State(state): State<ServerState>
 ) -> Json<Vec<PostResponse>> {
     let pool = &state.pool;
@@ -130,14 +134,15 @@ async fn get_posts(
             p.id, 
             p.content, 
             p.influence_earned, 
-            u.username as author_name, 
+            COALESCE(u.username, 'Anonymous') as author_name, 
             f.name as faction_name,
             p.is_anonymous,
             p.user_id,
             (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as reply_count,
-            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has_boosted
+            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has_boosted,
+            p.created_at
         FROM posts p
-        JOIN users u ON p.user_id = u.id
+        LEFT JOIN users u ON p.user_id = u.id
         LEFT JOIN factions f ON u.faction_id = f.id
         ORDER BY p.created_at DESC
         LIMIT 50
@@ -158,7 +163,9 @@ async fn delete_post(
 ) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
     let pool = &state.pool;
 
-    let res = sqlx::query!("DELETE FROM posts WHERE id = $1 AND user_id = $2", post_id, auth_user.user_id)
+    let res = sqlx::query("DELETE FROM posts WHERE id = $1 AND user_id = $2")
+        .bind(post_id)
+        .bind(auth_user.user_id)
         .execute(pool)
         .await
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -247,6 +254,12 @@ async fn main() {
         .route("/api/auth/logout", axum::routing::post(auth::logout))
         .route("/api/auth/me", get(auth::me))
 
+        // Social
+        .route("/api/leaderboard", get(social::get_leaderboard))
+        
+        // Notifications
+        .route("/api/notifications", axum::routing::get(notifications::get_notifications).post(notifications::mark_notifications_read))
+
         // Posts
         .route("/api/posts", axum::routing::post(create_post).get(get_posts))
         .route("/api/posts/:id", axum::routing::delete(delete_post))
@@ -275,6 +288,10 @@ async fn main() {
         .route(
             "/api/factions/create",
             axum::routing::post(game::create_faction),
+        )
+        .route(
+            "/api/factions/leave",
+            axum::routing::post(game::leave_faction),
         )
 
         // Comms

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Skull, Mail, User, KeyRound, Building2, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { API_URL, setToken } from '@/lib/api';
 
 export default function SignupPage() {
@@ -11,6 +12,15 @@ export default function SignupPage() {
   const [error, setError] = useState('');
 
   const [formData, setFormData] = useState({ username: '', email: '', faction_name: '', password: '' });
+
+  const { data: factions } = useQuery<{id: string, name: string}[]>({
+    queryKey: ['factions'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/factions`);
+      if (!res.ok) throw new Error('Failed to load factions');
+      return res.json();
+    }
+  });
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,11 +126,9 @@ export default function SignupPage() {
                 className="w-full bg-zinc-950/50 border border-zinc-800 rounded pl-10 pr-4 py-2.5 text-sm focus:border-purple-500/50 outline-none transition-colors appearance-none text-zinc-300"
               >
                 <option value="" disabled>Select Allegiance...</option>
-                <option value="The Ravens">The Ravens</option>
-                <option value="The Cartel">The Cartel</option>
-                <option value="Ghost Protocol">Ghost Protocol</option>
-                <option value="The Syndicate">The Syndicate</option>
-                <option value="404">404</option>
+                {factions?.map((f) => (
+                  <option key={f.id} value={f.name}>{f.name}</option>
+                ))}
               </select>
             </div>
           </div>

@@ -189,15 +189,16 @@ async fn delete_post(
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
     dotenvy::dotenv().ok();
 
-    println!("Starting server...");
-    println!("Loading environment variables...");
+    tracing::info!("Starting server...");
+    tracing::info!("Loading environment variables...");
 
     let database_url =
         env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    println!("Connecting to database...");
+    tracing::info!("Connecting to database...");
 
     let pool = match PgPoolOptions::new()
         .max_connections(5)
@@ -205,14 +206,14 @@ async fn main() {
         .await
     {
         Ok(pool) => {
-            println!("✅ Connection to the database is successful!");
+            tracing::info!("✅ Connection to the database is successful!");
 
-            println!("Running database migrations...");
+            tracing::info!("Running database migrations...");
 
             match sqlx::migrate!("./migrations").run(&pool).await {
-                Ok(_) => println!("✅ Migrations completed successfully!"),
+                Ok(_) => tracing::info!("✅ Migrations completed successfully!"),
                 Err(e) => {
-                    println!("🔥 Failed to run migrations: {:?}", e);
+                    tracing::error!("🔥 Failed to run migrations: {:?}", e);
                     std::process::exit(1);
                 }
             }
@@ -220,7 +221,7 @@ async fn main() {
             pool
         }
         Err(err) => {
-            println!("🔥 Failed to connect to the database: {:?}", err);
+            tracing::error!("🔥 Failed to connect to the database: {:?}", err);
             std::process::exit(1);
         }
     };
@@ -360,23 +361,23 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
-    println!("Binding to {}", addr);
+    tracing::info!("Binding to {}", addr);
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(listener) => {
-            println!("✅ TCP listener bound successfully");
+            tracing::info!("✅ TCP listener bound successfully");
             listener
         }
         Err(e) => {
-            println!("🔥 Failed to bind listener: {:?}", e);
+            tracing::error!("🔥 Failed to bind listener: {:?}", e);
             std::process::exit(1);
         }
     };
 
-    println!("🚀 Server listening on {}", addr);
-    println!("🚀 Starting Axum...");
+    tracing::info!("🚀 Server listening on {}", addr);
+    tracing::info!("🚀 Starting Axum...");
 
     if let Err(e) = axum::serve(listener, app).await {
-        println!("🔥 Axum server crashed: {:?}", e);
+        tracing::error!("🔥 Axum server crashed: {:?}", e);
     }
 }

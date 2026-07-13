@@ -17,3 +17,5 @@ jsonwebtoken = "9.3"
 bcrypt = "0.15"
 axum-extra = { version = "0.9", features = ["cookie"] }
 futures = "0.3"
+tracing = "0.1"
+tracing-subscriber = "0.3"

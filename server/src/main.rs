@@ -210,6 +210,7 @@ async fn main() {
 
             tracing::info!("Running database migrations...");
 
+            tracing::info!("Attempting to run migrations...");
             match sqlx::migrate!("./migrations").run(&pool).await {
                 Ok(_) => tracing::info!("✅ Migrations completed successfully!"),
                 Err(e) => {
@@ -217,6 +218,7 @@ async fn main() {
                     std::process::exit(1);
                 }
             }
+            tracing::info!("Migrations logic finished.");
 
             pool
         }

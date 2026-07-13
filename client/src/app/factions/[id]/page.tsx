@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
+import ConfirmJoinDialog from '@/components/ConfirmJoinDialog';
 
 type Faction = {
   id: string;
@@ -40,6 +41,8 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
   const { user } = useUser();
   const [isDeclaringWar, setIsDeclaringWar] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  const [showJoinConfirm, setShowJoinConfirm] = useState(false);
 
   const { data: faction, isLoading } = useQuery<Faction>({
     queryKey: ['faction', unwrappedParams.id],
@@ -80,17 +83,32 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
 
   const factionTerritories = territories?.filter(t => t.controlling_faction_id === faction?.id) || [];
   const isMyFaction = user?.faction_name === faction?.name;
+  const isUnaffiliated = !user?.faction_name;
 
   const handleLeaveFaction = async () => {
     setIsLeaving(true);
     try {
       const res = await apiFetch('/api/factions/leave', { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to leave faction');
+      if (!res.ok) throw new Error(await res.text());
       toast.success('You have left the faction.');
       setTimeout(() => { window.location.href = '/factions'; }, 1000);
-    } catch {
-      toast.error('Failed to leave faction.');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to leave faction.');
       setIsLeaving(false);
+    }
+  };
+
+  const handleJoinFaction = async () => {
+    setIsJoining(true);
+    setShowJoinConfirm(false);
+    try {
+      const res = await apiFetch(`/api/factions/${faction?.id}/join`, { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success(`Allegiance pledged to ${faction?.name}.`);
+      setTimeout(() => { window.location.href = `/factions/${faction?.id}`; }, 1000);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to join faction.');
+      setIsJoining(false);
     }
   };
 
@@ -121,46 +139,70 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
           ) : (
             <>
               {/* Header Card */}
-              <div className="border border-zinc-800 bg-black/60 p-8 rounded relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-green-500/5 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="border border-green-500/30 bg-black/80 backdrop-blur-xl p-8 rounded-lg relative overflow-hidden shadow-[0_0_40px_rgba(34,197,94,0.1)] hover:shadow-[0_0_60px_rgba(34,197,94,0.2)] transition-shadow duration-500">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-green-500/10 rounded-full blur-[80px] pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-500/10 rounded-full blur-[60px] pointer-events-none"></div>
                 
-                <div className="flex justify-between items-start relative z-10">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10 gap-6">
                   <div>
-                    <h1 className="text-4xl font-bold text-green-500 glow-text mb-2 tracking-tighter uppercase">{faction.name}</h1>
-                    <p className="text-zinc-400 max-w-lg">{faction.description || 'No classified intel available on this syndicate.'}</p>
+                    <div className="inline-block px-3 py-1 bg-green-500/10 border border-green-500/30 rounded text-xs font-bold text-green-400 mb-4 uppercase tracking-widest">Syndicate Profile</div>
+                    <h1 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600 mb-3 tracking-tighter uppercase drop-shadow-[0_0_15px_rgba(34,197,94,0.3)]">{faction.name}</h1>
+                    <p className="text-zinc-400 max-w-lg text-sm leading-relaxed border-l-2 border-zinc-800 pl-4">{faction.description || 'No classified intel available on this syndicate. Operate with caution.'}</p>
                   </div>
-                  <Shield className={isMyFaction ? "text-green-500" : "text-zinc-600"} size={48} />
+                  <div className="flex-shrink-0 p-6 rounded-full bg-black/50 border border-zinc-800 shadow-[inset_0_0_20px_rgba(34,197,94,0.05)]">
+                    <Shield className={isMyFaction ? "text-green-500 drop-shadow-[0_0_10px_rgba(34,197,94,0.8)]" : "text-zinc-600"} size={56} />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 relative z-10 border-t border-zinc-800/50 pt-6">
-                  <div>
-                    <div className="text-xs text-zinc-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Users size={12}/> Members</div>
-                    <div className="text-xl font-bold text-zinc-200">{faction.member_count} / 50</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10 relative z-10 border-t border-zinc-800/50 pt-6">
+                  <div className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-900 hover:border-green-500/30 transition-colors">
+                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Users size={12} className="text-purple-400"/> Operatives</div>
+                    <div className="text-2xl font-bold text-zinc-200">{faction.member_count} <span className="text-xs text-zinc-600 font-normal">/ 50</span></div>
                   </div>
-                  <div>
-                    <div className="text-xs text-zinc-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Activity size={12}/> Influence</div>
-                    <div className="text-xl font-bold text-yellow-500">{faction.influence}</div>
+                  <div className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-900 hover:border-yellow-500/30 transition-colors">
+                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Activity size={12} className="text-yellow-400"/> Influence</div>
+                    <div className="text-2xl font-bold text-yellow-500">{faction.influence}</div>
                   </div>
-                  <div>
-                    <div className="text-xs text-zinc-500 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Crosshair size={12}/> Status</div>
-                    <div className="text-xl font-bold text-blue-500">Active</div>
+                  <div className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-900 hover:border-blue-500/30 transition-colors">
+                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Crosshair size={12} className="text-blue-400"/> Zones</div>
+                    <div className="text-2xl font-bold text-zinc-200">{factionTerritories.length}</div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-900 hover:border-green-500/30 transition-colors">
+                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Shield size={12} className="text-green-400"/> Status</div>
+                    <div className="text-lg font-bold text-green-500 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Active</div>
                   </div>
                 </div>
               </div>
 
               {/* Actions Area */}
-              {!isMyFaction && (
-                <div className="border border-red-900/30 bg-red-950/10 p-6 rounded flex items-center justify-between">
-                  <div>
-                    <h3 className="text-red-500 font-bold uppercase tracking-widest mb-1">Hostile Actions</h3>
-                    <p className="text-sm text-zinc-500">Initiate a direct assault on territories controlled by {faction.name}.</p>
+              {isUnaffiliated && (
+                <div className="border border-purple-500/30 bg-purple-950/10 p-6 rounded-lg flex flex-col md:flex-row items-center justify-between shadow-[0_0_20px_rgba(168,85,247,0.1)]">
+                  <div className="mb-4 md:mb-0">
+                    <h3 className="text-purple-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-2"><Users size={16}/> Join Syndicate</h3>
+                    <p className="text-sm text-zinc-400 max-w-md leading-relaxed">Align yourself with this faction to access encrypted comms and shared inventory. (Warning: Joining triggers a 5-day cooldown before you can leave).</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowJoinConfirm(true)}
+                    disabled={isJoining}
+                    className="w-full md:w-auto px-8 py-3.5 bg-purple-500/10 text-purple-400 border border-purple-500/50 rounded hover:bg-purple-500/20 hover:shadow-[0_0_15px_rgba(168,85,247,0.4)] font-bold uppercase tracking-widest transition-all disabled:opacity-50"
+                  >
+                    {isJoining ? 'Encrypting Connection...' : 'Request Allegiance'}
+                  </button>
+                </div>
+              )}
+
+              {!isMyFaction && !isUnaffiliated && (
+                <div className="border border-red-500/30 bg-red-950/10 p-6 rounded-lg flex flex-col md:flex-row items-center justify-between shadow-[0_0_20px_rgba(239,68,68,0.1)]">
+                  <div className="mb-4 md:mb-0">
+                    <h3 className="text-red-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-2"><Skull size={16}/> Hostile Actions</h3>
+                    <p className="text-sm text-zinc-400 max-w-md leading-relaxed">Initiate a direct assault on territories controlled by {faction.name}. Prepare for counter-measures.</p>
                   </div>
                   <button 
                     onClick={handleInvade}
                     disabled={isDeclaringWar}
-                    className="px-6 py-3 bg-red-500/10 text-red-500 border border-red-500/50 rounded font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
+                    className="w-full md:w-auto px-8 py-3.5 bg-red-500/10 text-red-500 border border-red-500/50 rounded font-bold uppercase tracking-widest hover:bg-red-500/20 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] transition-all flex items-center justify-center gap-2"
                   >
-                    <Skull size={18} />
+                    <Crosshair size={18} />
                     {isDeclaringWar ? 'Authorizing...' : 'Invade'}
                   </button>
                 </div>
@@ -183,20 +225,26 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
               )}
 
               {/* Faction Territories */}
-              <div className="border border-zinc-800 bg-black/40 rounded mt-6">
-                <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Controlled Territories</h3>
-                  <span className="text-xs text-zinc-500">{factionTerritories.length} Zones</span>
+              <div className="border border-zinc-800/80 bg-black/60 rounded-lg overflow-hidden shadow-lg mt-8">
+                <div className="p-5 border-b border-zinc-800/80 bg-zinc-900/30 flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-widest flex items-center gap-2"><Crosshair size={16} className="text-blue-500"/> Controlled Territories</h3>
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-blue-500/10 text-blue-400 rounded border border-blue-500/20">{factionTerritories.length} Zones</span>
                 </div>
-                <div className="p-4">
+                <div className="p-6">
                   {factionTerritories.length === 0 ? (
-                    <div className="text-center text-zinc-500 text-xs py-4">No territories currently controlled.</div>
+                    <div className="flex flex-col items-center justify-center py-10 text-zinc-600 border border-dashed border-zinc-800 rounded-lg">
+                      <Crosshair size={32} className="mb-3 opacity-20" />
+                      <div className="text-xs uppercase tracking-widest">No territories currently controlled</div>
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                       {factionTerritories.map(t => (
-                        <div key={t.id} className="p-3 border border-zinc-800/50 bg-black/60 rounded">
-                          <h4 className="font-bold text-zinc-300">{t.name}</h4>
-                          <div className="text-xs text-zinc-500 mt-1">DEF: <span className="text-blue-400 font-bold">{t.defense_score}</span></div>
+                        <div key={t.id} className="p-4 border border-zinc-800 bg-zinc-950/50 rounded-lg hover:border-blue-500/30 hover:bg-blue-950/10 transition-colors group">
+                          <h4 className="font-bold text-zinc-200 group-hover:text-blue-400 transition-colors">{t.name}</h4>
+                          <div className="text-[10px] uppercase tracking-widest text-zinc-500 mt-2 flex items-center justify-between">
+                            <span>Defense Grid</span>
+                            <span className="text-blue-400 font-bold bg-blue-500/10 px-1.5 py-0.5 rounded">{t.defense_score}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -228,27 +276,36 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
               )}
 
               {/* Roster Area */}
-              <div className="border border-zinc-800 bg-black/40 rounded mt-6">
-                <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Active Roster</h3>
-                  <span className="text-xs text-zinc-500">{members?.length || 0} Operatives</span>
+              <div className="border border-zinc-800/80 bg-black/60 rounded-lg overflow-hidden shadow-lg mt-8 mb-10">
+                <div className="p-5 border-b border-zinc-800/80 bg-zinc-900/30 flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-widest flex items-center gap-2"><Users size={16} className="text-purple-500"/> Active Roster</h3>
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-purple-500/10 text-purple-400 rounded border border-purple-500/20">{members?.length || 0} Operatives</span>
                 </div>
-                <div className="p-4">
+                <div className="p-6">
                   {isLoadingMembers ? (
-                    <div className="text-center text-zinc-500 text-xs py-4 animate-pulse">Scanning signatures...</div>
+                    <div className="flex flex-col items-center justify-center py-10 text-zinc-600 animate-pulse">
+                      <Activity size={32} className="mb-3 opacity-20" />
+                      <div className="text-xs uppercase tracking-widest">Scanning network signatures...</div>
+                    </div>
                   ) : members?.length === 0 ? (
-                    <div className="text-center text-zinc-500 text-xs py-4">No operatives found.</div>
+                    <div className="flex flex-col items-center justify-center py-10 text-zinc-600 border border-dashed border-zinc-800 rounded-lg">
+                      <Users size={32} className="mb-3 opacity-20" />
+                      <div className="text-xs uppercase tracking-widest">No operatives found</div>
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {members?.map(member => (
-                        <div key={member.id} className="flex items-center justify-between p-3 border border-zinc-800/50 bg-black/60 rounded">
+                        <div key={member.id} className="flex items-center justify-between p-3 border border-zinc-800/80 bg-zinc-950/80 rounded-lg hover:border-purple-500/30 hover:bg-purple-950/10 transition-colors group">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded bg-zinc-900 border border-zinc-700 flex items-center justify-center">
-                              <span className="text-green-500 font-bold text-xs">{member.username.substring(0, 2).toUpperCase()}</span>
+                            <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center group-hover:border-purple-500/50 transition-colors shadow-inner">
+                              <span className="text-zinc-400 font-bold text-xs group-hover:text-purple-400 transition-colors">{member.username.substring(0, 2).toUpperCase()}</span>
                             </div>
-                            <span className="text-sm font-bold text-zinc-300">@{member.username}</span>
+                            <div>
+                              <div className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors">@{member.username}</div>
+                              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Operative</div>
+                            </div>
                           </div>
-                          <div className="text-xs font-mono text-yellow-500">{member.influence} INF</div>
+                          <div className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/20">{member.influence} INF</div>
                         </div>
                       ))}
                     </div>
@@ -259,6 +316,14 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
           )}
         </div>
       </div>
+
+      <ConfirmJoinDialog
+        isOpen={showJoinConfirm}
+        onClose={() => setShowJoinConfirm(false)}
+        onConfirm={handleJoinFaction}
+        factionName={faction?.name || ''}
+        isConfirming={isJoining}
+      />
     </DashboardLayout>
   );
 }

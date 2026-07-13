@@ -112,41 +112,41 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <header className="h-14 border-b border-green-500/20 flex items-center px-6 bg-black/40 backdrop-blur-md">
-        <h2 className="text-sm font-semibold text-green-500 uppercase tracking-widest">Global Feed // Live</h2>
-        <div className="ml-auto flex items-center gap-2">
+      <header className="h-16 border-b border-green-500/30 flex items-center px-8 bg-black/60 backdrop-blur-md">
+        <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text">Global Feed // Live</h2>
+        <div className="ml-auto flex items-center gap-2 px-3 py-1 bg-green-500/10 border border-green-500/20 rounded">
           <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-          <span className="text-xs text-green-500/70">Connected</span>
+          <span className="text-[10px] font-bold text-green-500 uppercase">System Active</span>
         </div>
       </header>
       
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
+      <div className="flex-1 overflow-y-auto p-8 space-y-8 pb-24">
         {/* Post Input */}
-        <div className="p-4 border border-zinc-800 bg-black/40 rounded focus-within:border-green-500/50 transition-colors">
+        <div className="p-6 border border-zinc-800 bg-black/60 backdrop-blur rounded-lg focus-within:border-green-500/50 transition-all duration-300 shadow-[0_0_20px_rgba(0,0,0,0.5)] animate-slide-in">
           <textarea 
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="w-full bg-transparent resize-none outline-none text-sm placeholder:text-zinc-600" 
-            placeholder="Drop intel or propaganda..."
-            rows={2}
+            className="w-full bg-transparent resize-none outline-none text-sm placeholder:text-zinc-600 text-zinc-100" 
+            placeholder="Broadcast encrypted intel..."
+            rows={3}
           ></textarea>
-          <div className="flex justify-between items-center mt-2 border-t border-zinc-800/50 pt-3">
-            <div className="flex items-center gap-4">
-              <span className="text-xs text-zinc-600">+10 Influence per drop</span>
-              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
+          <div className="flex justify-between items-center mt-4 border-t border-zinc-800 pt-4">
+            <div className="flex items-center gap-6">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-widest">+10 INF Reward</span>
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors">
                 <input 
                   type="checkbox" 
                   checked={isAnonymous} 
                   onChange={(e) => setIsAnonymous(e.target.checked)} 
                   className="accent-green-500"
                 />
-                <ShieldAlert size={14} /> Incognito Mode
+                <ShieldAlert size={14} /> Incognito
               </label>
             </div>
             <button 
               onClick={handleBroadcast}
               disabled={mutation.isPending || !content.trim()}
-              className="px-4 py-1.5 bg-green-500/10 text-green-500 border border-green-500/30 rounded text-xs font-bold uppercase hover:bg-green-500/20 transition-colors disabled:opacity-50"
+              className="px-6 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all duration-300 disabled:opacity-50"
             >
               {mutation.isPending ? 'Transmitting...' : 'Broadcast'}
             </button>
@@ -155,18 +155,21 @@ export default function Dashboard() {
 
         {/* Real Posts */}
         {isLoading ? (
-          <div className="text-center text-zinc-500 text-sm py-10 animate-pulse">Scanning frequencies...</div>
+          <div className="text-center text-green-500 text-sm py-12 animate-pulse font-mono">// Scanning frequencies...</div>
         ) : posts?.length === 0 ? (
-          <div className="text-center text-zinc-500 text-sm py-10">No intel on the network yet. Drop some.</div>
+          <div className="text-center text-zinc-600 text-sm py-12">Network silent. No intel detected.</div>
         ) : (
-          posts?.map(post => (
-            <PostCard 
-              key={post.id}
-              post={post}
-              isMine={!!user && user.id === post.user_id}
-              isAnonymousUser={!user}
-            />
-          ))
+          <div className="space-y-6">
+            {posts?.map((post, i) => (
+              <div key={post.id} className="animate-slide-in" style={{ animationDelay: `${i * 100}ms` }}>
+                <PostCard 
+                  post={post}
+                  isMine={!!user && user.id === post.user_id}
+                  isAnonymousUser={!user}
+                />
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </DashboardLayout>
@@ -238,15 +241,20 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
   });
 
   return (
-    <div className="border border-zinc-800 bg-black/40 p-4 rounded hover:border-zinc-700 transition-colors">
-      <div className="flex justify-between items-start mb-2">
-        <div className="flex items-center gap-2">
-          <span className={`font-bold text-sm ${post.is_anonymous ? 'text-zinc-500' : 'text-zinc-200'}`}>{displayAuthor}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">{displayFaction}</span>
-        </div>
+    <div className="border border-zinc-800 bg-black/60 p-6 rounded-lg hover:border-green-500/30 transition-all duration-300 shadow-[0_0_15px_rgba(0,0,0,0.3)]">
+      <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-600">
-            {post.created_at ? new Date(post.created_at).toLocaleString() : 'Just now'}
+          <div className="w-8 h-8 rounded-sm bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+            <Zap size={14} />
+          </div>
+          <div>
+            <span className={`block font-bold text-sm ${post.is_anonymous ? 'text-zinc-500' : 'text-zinc-200'}`}>{displayAuthor}</span>
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{displayFaction}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-[10px] font-mono text-zinc-600">
+            {post.created_at ? new Date(post.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
           </span>
           {isMine && (
             <button onClick={() => deleteMutation.mutate()} className="text-zinc-600 hover:text-red-500 transition-colors">
@@ -255,9 +263,9 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           )}
         </div>
       </div>
-      <p className="text-sm text-zinc-300 leading-relaxed mb-3">{post.content}</p>
-      <div className="flex justify-between items-center pt-3 border-t border-zinc-900/50">
-        <div className="flex gap-4">
+      <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono">{post.content}</p>
+      <div className="flex justify-between items-center pt-4 border-t border-zinc-800/50">
+        <div className="flex gap-6">
           <button 
             onClick={() => {
               if (isAnonymousUser) {
@@ -267,45 +275,45 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
               boostMutation.mutate();
             }} 
             disabled={boostMutation.isPending || post.has_boosted}
-            className={`flex items-center gap-1.5 text-xs transition-colors ${post.has_boosted ? 'text-green-500 font-bold cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+            className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
           >
             <Zap size={14} className={post.has_boosted ? "fill-green-500" : ""} />
             <span>{post.has_boosted ? 'Boosted' : 'Boost'}</span>
           </button>
           <button 
             onClick={() => setShowComments(!showComments)}
-            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors"
+            className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-blue-400 transition-colors"
           >
             <MessageSquare size={14} />
             <span>{post.reply_count} Replies</span>
           </button>
         </div>
-        <span className="text-xs font-bold text-green-500">+{post.influence_earned} INF</span>
+        <span className="text-[10px] font-bold text-green-500 glow-text uppercase tracking-widest">+{post.influence_earned} INF</span>
       </div>
 
       {showComments && (
-        <div className="mt-4 pt-4 border-t border-zinc-800/50 space-y-3 pl-4 border-l-2 border-zinc-800">
+        <div className="mt-6 pt-6 border-t border-zinc-800 space-y-4 pl-6 border-l border-zinc-800">
           {comments?.map(c => (
             <div key={c.id} className="text-xs flex justify-between">
               <div>
-                <span className="font-bold text-zinc-400 mr-2">@{c.author_name}</span>
+                <span className="font-bold text-zinc-400 mr-3">@{c.author_name}</span>
                 <span className="text-zinc-300">{c.content}</span>
               </div>
-              <span className="text-[10px] text-zinc-600">{c.created_at ? new Date(c.created_at).toLocaleString() : ''}</span>
+              <span className="text-[9px] font-mono text-zinc-600">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             </div>
           ))}
-          <div className="flex gap-2 mt-2">
+          <div className="flex gap-3 mt-4">
             <input 
               type="text" 
               value={commentText}
               onChange={e => setCommentText(e.target.value)}
               placeholder="Add your intel..." 
-              className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs outline-none focus:border-green-500/50 text-zinc-200"
+              className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-4 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-200"
             />
             <button 
               onClick={() => commentMutation.mutate()}
               disabled={!commentText.trim() || commentMutation.isPending}
-              className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-bold transition-colors disabled:opacity-50"
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50"
             >
               Reply
             </button>

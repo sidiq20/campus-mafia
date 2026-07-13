@@ -2,6 +2,7 @@
 
 import { use, useState } from 'react';
 import { Shield, Users, Crosshair, Skull, Activity } from 'lucide-react';
+import { RankBadgeSmall } from '@/components/RankBadge';
 import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import Link from 'next/link';
@@ -18,10 +19,13 @@ type Faction = {
   member_count: number;
 };
 
+import type { RankInfo } from '@/contexts/UserContext';
+
 type FactionMember = {
   id: string;
   username: string;
   influence: number;
+  rank: RankInfo;
 };
 
 type Territory = {
@@ -296,16 +300,18 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {members?.map(member => (
                         <div key={member.id} className="flex items-center justify-between p-3 border border-zinc-800/80 bg-zinc-950/80 rounded-lg hover:border-purple-500/30 hover:bg-purple-950/10 transition-colors group">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center group-hover:border-purple-500/50 transition-colors shadow-inner">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center group-hover:border-purple-500/50 transition-colors shadow-inner shrink-0">
                               <span className="text-zinc-400 font-bold text-xs group-hover:text-purple-400 transition-colors">{member.username.substring(0, 2).toUpperCase()}</span>
                             </div>
-                            <div>
-                              <div className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors">@{member.username}</div>
-                              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Operative</div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors truncate">@{member.username}</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <RankBadgeSmall rank={member.rank} />
+                              </div>
                             </div>
                           </div>
-                          <div className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/20">{member.influence} INF</div>
+                          <div className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/20 shrink-0 ml-2">{member.influence} INF</div>
                         </div>
                       ))}
                     </div>

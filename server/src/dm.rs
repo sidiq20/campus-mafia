@@ -1,0 +1,95 @@
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
+use serde::{Deserialize, Serialize};
+use crate::{ServerState, auth::AuthUser};
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct DirectMessage {
+    pub id: uuid::Uuid,
+    pub sender_id: uuid::Uuid,
+    pub receiver_id: uuid::Uuid,
+    pub content: String,
+    pub is_read: bool,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Deserialize)]
+pub struct SendDMRequest {
+    pub receiver_username: String,
+    pub content: String,
+}
+
+pub async fn send_dm(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Json(payload): Json<SendDMRequest>,
+) -> Result<Json<DirectMessage>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    // Find receiver
+    let receiver_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM users WHERE username = $1"
+    )
+    .bind(&payload.receiver_username)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::BAD_REQUEST, "User not found".to_string()))?;
+
+    if receiver_id == auth_user.user_id {
+        return Err((StatusCode::BAD_REQUEST, "Cannot send message to yourself".to_string()));
+    }
+
+    let dm = sqlx::query_as::<_, DirectMessage>(
+        r#"
+        INSERT INTO direct_messages (sender_id, receiver_id, content)
+        VALUES ($1, $2, $3)
+        RETURNING id, sender_id, receiver_id, content, is_read, created_at
+        "#
+    )
+    .bind(auth_user.user_id)
+    .bind(receiver_id)
+    .bind(&payload.content)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(dm))
+}
+
+pub async fn get_dm_history(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(other_username): Path<String>,
+) -> Result<Json<Vec<DirectMessage>>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    let other_user_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM users WHERE username = $1"
+    )
+    .bind(&other_username)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::BAD_REQUEST, "User not found".to_string()))?;
+
+    let dms = sqlx::query_as::<_, DirectMessage>(
+        r#"
+        SELECT id, sender_id, receiver_id, content, is_read, created_at
+        FROM direct_messages
+        WHERE (sender_id = $1 AND receiver_id = $2)
+           OR (sender_id = $2 AND receiver_id = $1)
+        ORDER BY created_at ASC
+        "#
+    )
+    .bind(auth_user.user_id)
+    .bind(other_user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(dms))
+}

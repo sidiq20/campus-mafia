@@ -18,9 +18,13 @@ mod game;
 mod comms;
 mod blackmarket;
 mod notifications;
+mod dm;
 mod ws;
+mod rank;
 use std::sync::Arc;
 use tokio::sync::broadcast;
+
+mod rank;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -259,6 +263,10 @@ async fn main() {
         
         // Notifications
         .route("/api/notifications", axum::routing::get(notifications::get_notifications).post(notifications::mark_notifications_read))
+
+        // Direct Messaging
+        .route("/api/chat/direct", axum::routing::post(dm::send_dm))
+        .route("/api/chat/direct/:username", axum::routing::get(dm::get_dm_history))
 
         // Posts
         .route("/api/posts", axum::routing::post(create_post).get(get_posts))

@@ -4,6 +4,15 @@ import React, { createContext, useContext } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 
+export type RankInfo = {
+  level: number;
+  tier: string;
+  name: string;
+  min_influence: number;
+  next_min_influence: number | null;
+  progress: number;
+};
+
 export type UserProfile = {
   id: string;
   username: string;
@@ -13,6 +22,7 @@ export type UserProfile = {
   influence: number;
   reputation: number;
   heat_level: number;
+  rank: RankInfo;
 };
 
 type UserContextType = {

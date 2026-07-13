@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{State, Path},
     http::StatusCode,
     Json,
 };
@@ -227,6 +227,65 @@ pub struct UserProfile {
     pub heat_level: i32,
     pub rank: RankInfo,
     pub faction_role: String,
+}
+
+pub async fn get_user_by_username(
+    State(state): State<crate::ServerState>,
+    Path(username): Path<String>,
+) -> Result<Json<UserProfile>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    #[derive(sqlx::FromRow)]
+    struct UserRow {
+        pub id: uuid::Uuid,
+        pub username: String,
+        pub email: String,
+        pub faction_id: Option<uuid::Uuid>,
+        pub faction_name: Option<String>,
+        pub influence: i32,
+        pub reputation: i32,
+        pub heat_level: i32,
+        pub faction_role: Option<String>,
+    }
+
+    let row = sqlx::query_as::<_, UserRow>(
+        r#"
+        SELECT 
+            u.id,
+            u.username,
+            u.email,
+            u.faction_id,
+            f.name as faction_name,
+            COALESCE(u.influence, 0) as influence,
+            COALESCE(u.reputation, 0) as reputation,
+            COALESCE(u.heat_level, 0) as heat_level,
+            u.faction_role
+        FROM users u
+        LEFT JOIN factions f ON u.faction_id = f.id
+        WHERE u.username = $1
+        "#
+    )
+    .bind(username)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let row = row.ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
+
+    let profile = UserProfile {
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        faction_id: row.faction_id,
+        faction_name: row.faction_name,
+        influence: row.influence,
+        reputation: row.reputation,
+        heat_level: row.heat_level,
+        rank: rank::get_rank_info(row.influence),
+        faction_role: row.faction_role.unwrap_or_else(|| "member".to_string()),
+    };
+
+    Ok(Json(profile))
 }
 
 pub async fn me(

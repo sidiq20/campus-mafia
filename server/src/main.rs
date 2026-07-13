@@ -263,6 +263,7 @@ async fn main() {
         .route("/api/auth/login", axum::routing::post(auth::login))
         .route("/api/auth/logout", axum::routing::post(auth::logout))
         .route("/api/auth/me", get(auth::me))
+        .route("/api/users/:username", get(auth::get_user_by_username))
 
         // Social
         .route("/api/leaderboard", get(social::get_leaderboard))

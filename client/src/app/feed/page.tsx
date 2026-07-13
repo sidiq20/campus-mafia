@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from 'react';
-import { Zap, Trash2, MessageSquare, ShieldAlert } from 'lucide-react';
+import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
+import { DailyInfTracker } from '@/components/DailyInfTracker';
 import { apiFetch } from '@/lib/api';
+import Link from 'next/link';
 
 type Post = {
   id: string;
@@ -34,6 +36,7 @@ export default function Dashboard() {
   const { user } = useUser();
   const [content, setContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: posts, isLoading } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -43,6 +46,11 @@ export default function Dashboard() {
       return res.json();
     },
   });
+
+  const filteredPosts = posts?.filter(post => 
+    post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    post.author_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const mutation = useMutation({
     mutationFn: async (newPost: { content: string, is_anonymous: boolean }) => {
@@ -112,15 +120,23 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <header className="h-16 border-b border-green-500/30 flex items-center px-8 bg-black/60 backdrop-blur-md">
+      <header className="h-16 border-b border-green-500/30 flex items-center justify-between px-8 bg-black/60 backdrop-blur-md">
         <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text">Global Feed // Live</h2>
-        <div className="ml-auto flex items-center gap-2 px-3 py-1 bg-green-500/10 border border-green-500/20 rounded">
-          <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-          <span className="text-[10px] font-bold text-green-500 uppercase">System Active</span>
-        </div>
+        <input 
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search broadcasts..."
+          className="bg-zinc-900 border border-zinc-800 rounded px-4 py-1.5 text-xs outline-none focus:border-green-500/50 text-zinc-200 w-64"
+        />
       </header>
       
       <div className="flex-1 overflow-y-auto p-8 space-y-8 pb-24">
+        {/* Daily INF Tracker */}
+        <div className="max-w-2xl mx-auto">
+          <DailyInfTracker />
+        </div>
+
         {/* Post Input */}
         <div className="p-6 border border-zinc-800 bg-black/60 backdrop-blur rounded-lg focus-within:border-green-500/50 transition-all duration-300 shadow-[0_0_20px_rgba(0,0,0,0.5)] animate-slide-in">
           <textarea 
@@ -132,7 +148,7 @@ export default function Dashboard() {
           ></textarea>
           <div className="flex justify-between items-center mt-4 border-t border-zinc-800 pt-4">
             <div className="flex items-center gap-6">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-widest">+10 INF Reward</span>
+              <span className="text-[10px] text-zinc-500 uppercase tracking-widest"><TrendingUp size={10} className="inline mr-1" />+10 INF Reward</span>
               <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors">
                 <input 
                   type="checkbox" 
@@ -156,11 +172,11 @@ export default function Dashboard() {
         {/* Real Posts */}
         {isLoading ? (
           <div className="text-center text-green-500 text-sm py-12 animate-pulse font-mono">// Scanning frequencies...</div>
-        ) : posts?.length === 0 ? (
-          <div className="text-center text-zinc-600 text-sm py-12">Network silent. No intel detected.</div>
+        ) : filteredPosts?.length === 0 ? (
+          <div className="text-center text-zinc-600 text-sm py-12">No intel matches your search.</div>
         ) : (
           <div className="space-y-6">
-            {posts?.map((post, i) => (
+            {filteredPosts?.map((post, i) => (
               <div key={post.id} className="animate-slide-in" style={{ animationDelay: `${i * 100}ms` }}>
                 <PostCard 
                   post={post}
@@ -248,7 +264,14 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
             <Zap size={14} />
           </div>
           <div>
-            <span className={`block font-bold text-sm ${post.is_anonymous ? 'text-zinc-500' : 'text-zinc-200'}`}>{displayAuthor}</span>
+            {post.is_anonymous ? (
+              <span className="block font-bold text-sm text-zinc-500">Anonymous</span>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link href={`/profile/${post.author_name}`} className="block font-bold text-sm text-zinc-200 hover:text-green-400">@{post.author_name}</Link>
+                <Link href={`/chat/${post.author_name}`} className="text-[9px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1 rounded uppercase">DM</Link>
+              </div>
+            )}
             <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{displayFaction}</span>
           </div>
         </div>

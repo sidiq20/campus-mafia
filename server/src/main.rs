@@ -21,10 +21,10 @@ mod notifications;
 mod dm;
 mod ws;
 mod rank;
+mod inf_limit;
+mod titles;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-
-mod rank;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -102,15 +102,21 @@ async fn create_post(
     .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .flatten();
 
-    let inf_reward = if has_propaganda_boost.unwrap_or(false) { 20 } else { 10 };
+    let base_reward = if has_propaganda_boost.unwrap_or(false) { 20 } else { 10 };
 
-    // Reward user with influence if they have an account
+    // Apply daily INF cap + check titles
     if let Some(uid) = user_id {
-        let _ = sqlx::query("UPDATE users SET influence = influence + $1 WHERE id = $2")
-            .bind(inf_reward)
+        let _ = crate::inf_limit::apply_inf_cap(pool, uid, base_reward).await;
+        let _ = crate::titles::check_post_titles(pool, uid, is_anon).await;
+        let _ = crate::titles::check_rank_titles(pool, uid, 0).await;
+        // Get updated influence for rank check
+        if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
             .bind(uid)
-            .execute(pool)
-            .await;
+            .fetch_optional(pool).await
+        {
+            let _ = crate::titles::check_rank_titles(pool, uid, inf).await;
+            let _ = crate::titles::check_lone_wolf_title(pool, uid, inf).await;
+        }
     }
 
     let display_author = if is_anon { "Anonymous".to_string() } else { post.author_name.clone() };
@@ -299,6 +305,10 @@ async fn main() {
             axum::routing::post(game::create_faction),
         )
         .route(
+            "/api/factions/:id/assign-role",
+            axum::routing::post(game::assign_role),
+        )
+        .route(
             "/api/factions/leave",
             axum::routing::post(game::leave_faction),
         )
@@ -314,6 +324,17 @@ async fn main() {
             axum::routing::post(comms::send_faction_chat)
                 .get(comms::get_faction_chat),
         )
+
+        // Ranks
+        .route("/api/ranks", get(rank::get_ranks_endpoint))
+
+        // Titles
+        .route("/api/titles", get(titles::get_my_titles))
+        .route("/api/titles/definitions", get(titles::get_all_title_definitions))
+        .route("/api/titles/check-all", axum::routing::post(titles::check_all_titles_endpoint))
+
+        // INF Grind Limit
+        .route("/api/inf/daily-stats", get(inf_limit::get_daily_inf_stats_endpoint))
 
         // Black Market
         .route("/api/blackmarket/inventory", get(blackmarket::get_inventory))

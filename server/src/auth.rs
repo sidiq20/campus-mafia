@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use std::env;
 
+use crate::rank::{self, RankInfo};
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: uuid::Uuid, // user_id
@@ -213,7 +215,7 @@ where
     }
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct UserProfile {
     pub id: uuid::Uuid,
     pub username: String,
@@ -223,6 +225,8 @@ pub struct UserProfile {
     pub influence: i32,
     pub reputation: i32,
     pub heat_level: i32,
+    pub rank: RankInfo,
+    pub faction_role: String,
 }
 
 pub async fn me(
@@ -231,7 +235,20 @@ pub async fn me(
 ) -> Result<Json<UserProfile>, (StatusCode, String)> {
     let pool = &state.pool;
 
-    let profile = sqlx::query_as::<_, UserProfile>(
+    #[derive(sqlx::FromRow)]
+    struct UserRow {
+        pub id: uuid::Uuid,
+        pub username: String,
+        pub email: String,
+        pub faction_id: Option<uuid::Uuid>,
+        pub faction_name: Option<String>,
+        pub influence: i32,
+        pub reputation: i32,
+        pub heat_level: i32,
+        pub faction_role: Option<String>,
+    }
+
+    let row = sqlx::query_as::<_, UserRow>(
         r#"
         SELECT 
             u.id,
@@ -241,7 +258,8 @@ pub async fn me(
             f.name as faction_name,
             COALESCE(u.influence, 0) as influence,
             COALESCE(u.reputation, 0) as reputation,
-            COALESCE(u.heat_level, 0) as heat_level
+            COALESCE(u.heat_level, 0) as heat_level,
+            u.faction_role
         FROM users u
         LEFT JOIN factions f ON u.faction_id = f.id
         WHERE u.id = $1
@@ -251,6 +269,19 @@ pub async fn me(
     .fetch_one(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let profile = UserProfile {
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        faction_id: row.faction_id,
+        faction_name: row.faction_name,
+        influence: row.influence,
+        reputation: row.reputation,
+        heat_level: row.heat_level,
+        rank: rank::get_rank_info(row.influence),
+        faction_role: row.faction_role.unwrap_or_else(|| "member".to_string()),
+    };
 
     Ok(Json(profile))
 }

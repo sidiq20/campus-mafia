@@ -1,9 +1,10 @@
 "use client";
 
 import { use, useState } from 'react';
-import { Shield, Users, Crosshair, Skull, Activity } from 'lucide-react';
+import { Shield, Users, Crosshair, Skull, Activity, Crown, Star, UserMinus, UserCog, Loader2 } from 'lucide-react';
 import { RankBadgeSmall } from '@/components/RankBadge';
-import { useQuery } from '@tanstack/react-query';
+import { ExecutiveBadgeSmall } from '@/components/ExecutiveBadge';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
@@ -26,6 +27,7 @@ type FactionMember = {
   username: string;
   influence: number;
   rank: RankInfo;
+  faction_role: string;
 };
 
 type Territory = {
@@ -46,7 +48,9 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
   const [isDeclaringWar, setIsDeclaringWar] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [isAssigningRole, setIsAssigningRole] = useState(false);
   const [showJoinConfirm, setShowJoinConfirm] = useState(false);
+  const [showRolePanel, setShowRolePanel] = useState(false);
 
   const { data: faction, isLoading } = useQuery<Faction>({
     queryKey: ['faction', unwrappedParams.id],
@@ -74,6 +78,8 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
       return res.json();
     },
   });
+
+  const queryClient = useQueryClient();
 
   const { data: inventory } = useQuery<InventoryItem[]>({
     queryKey: ['inventory'],
@@ -114,6 +120,24 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
       toast.error(e.message || 'Failed to join faction.');
       setIsJoining(false);
     }
+  };
+
+  const handleAssignRole = async (targetUserId: string, role: string) => {
+    setIsAssigningRole(true);
+    try {
+      const res = await apiFetch(`/api/factions/${faction?.id}/assign-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_user_id: targetUserId, role }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success(`Role updated to ${role.replace('_', ' ')}`);
+      queryClient.invalidateQueries({ queryKey: ['faction-members', unwrappedParams.id] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to assign role.');
+    }
+    setIsAssigningRole(false);
   };
 
   const handleInvade = () => {
@@ -283,8 +307,65 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
               <div className="border border-zinc-800/80 bg-black/60 rounded-lg overflow-hidden shadow-lg mt-8 mb-10">
                 <div className="p-5 border-b border-zinc-800/80 bg-zinc-900/30 flex justify-between items-center">
                   <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-widest flex items-center gap-2"><Users size={16} className="text-purple-500"/> Active Roster</h3>
-                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-purple-500/10 text-purple-400 rounded border border-purple-500/20">{members?.length || 0} Operatives</span>
+                  <div className="flex items-center gap-3">
+                    {isMyFaction && user?.faction_role === 'head' && (
+                      <button
+                        onClick={() => setShowRolePanel(!showRolePanel)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                          showRolePanel
+                            ? 'bg-yellow-500/15 border-yellow-500/50 text-yellow-400'
+                            : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:border-yellow-500/30 hover:text-yellow-400'
+                        }`}
+                      >
+                        <UserCog size={12} />
+                        Manage Roles
+                      </button>
+                    )}
+                    <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 bg-purple-500/10 text-purple-400 rounded border border-purple-500/20">{members?.length || 0} Operatives</span>
+                  </div>
                 </div>
+
+                {/* Head Role Management Panel */}
+                {showRolePanel && isMyFaction && (
+                  <div className="p-5 border-b border-yellow-500/20 bg-yellow-500/5">
+                    <h4 className="text-[10px] font-bold text-yellow-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Crown size={14} />
+                      Role Assignment Panel
+                    </h4>
+                    <p className="text-[10px] text-zinc-500 mb-4">Click a role button to assign it to a member. Max 1 Vice Head, 4 Executives.</p>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                      {members?.filter(m => m.id !== user?.id).map(member => (
+                        <div key={member.id} className="flex items-center justify-between p-2.5 rounded-lg bg-black/40 border border-zinc-800/50">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-bold text-zinc-300 truncate">@{member.username}</span>
+                            <ExecutiveBadgeSmall role={member.faction_role} />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {(['vice_head', 'executive', 'member'] as const).map(role => (
+                              <button
+                                key={role}
+                                onClick={() => handleAssignRole(member.id, role)}
+                                disabled={isAssigningRole || member.faction_role === role}
+                                className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest border transition-all disabled:opacity-40 ${
+                                  member.faction_role === role
+                                    ? 'bg-zinc-700/30 border-zinc-600/30 text-zinc-500'
+                                    : role === 'vice_head'
+                                      ? 'border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10'
+                                      : role === 'executive'
+                                        ? 'border-purple-500/30 text-purple-400 hover:bg-purple-500/10'
+                                        : 'border-zinc-700/30 text-zinc-500 hover:bg-zinc-700/20'
+                                }`}
+                              >
+                                {role === 'vice_head' ? 'Vice' : role.charAt(0).toUpperCase() + role.slice(1)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-6">
                   {isLoadingMembers ? (
                     <div className="flex flex-col items-center justify-center py-10 text-zinc-600 animate-pulse">
@@ -299,13 +380,24 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {members?.map(member => (
-                        <div key={member.id} className="flex items-center justify-between p-3 border border-zinc-800/80 bg-zinc-950/80 rounded-lg hover:border-purple-500/30 hover:bg-purple-950/10 transition-colors group">
+                        <div key={member.id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors group ${
+                          member.faction_role === 'head'
+                            ? 'border-yellow-500/30 bg-yellow-950/20 hover:bg-yellow-950/30'
+                            : member.faction_role === 'vice_head'
+                              ? 'border-cyan-500/20 bg-cyan-950/15 hover:bg-cyan-950/25'
+                              : member.faction_role === 'executive'
+                                ? 'border-purple-500/20 bg-purple-950/15 hover:bg-purple-950/25'
+                                : 'border-zinc-800/80 bg-zinc-950/80 hover:border-purple-500/30 hover:bg-purple-950/10'
+                        }`}>
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center group-hover:border-purple-500/50 transition-colors shadow-inner shrink-0">
                               <span className="text-zinc-400 font-bold text-xs group-hover:text-purple-400 transition-colors">{member.username.substring(0, 2).toUpperCase()}</span>
                             </div>
                             <div className="min-w-0">
-                              <div className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors truncate">@{member.username}</div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors truncate">@{member.username}</div>
+                                <ExecutiveBadgeSmall role={member.faction_role} />
+                              </div>
                               <div className="flex items-center gap-2 mt-1">
                                 <RankBadgeSmall rank={member.rank} />
                               </div>

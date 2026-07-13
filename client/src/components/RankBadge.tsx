@@ -14,7 +14,8 @@ const tierColors: Record<string, { bg: string; text: string; border: string; glo
   Mythic:     { bg: 'bg-red-950',         text: 'text-red-400',    border: 'border-red-700',    glow: 'shadow-[0_0_8px_rgba(248,113,113,0.4)]',  bar: 'bg-red-500' },
 };
 
-export function RankBadgeSmall({ rank }: { rank: RankInfo }) {
+export function RankBadgeSmall({ rank }: { rank?: RankInfo }) {
+  if (!rank || !rank.tier) return null;
   const c = tierColors[rank.tier] || tierColors.Street;
   return (
     <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${c.bg} ${c.text} ${c.border} border ${c.glow}`}>
@@ -24,7 +25,8 @@ export function RankBadgeSmall({ rank }: { rank: RankInfo }) {
   );
 }
 
-export function RankBadgeFull({ rank, influence }: { rank: RankInfo; influence: number }) {
+export function RankBadgeFull({ rank, influence }: { rank?: RankInfo; influence: number }) {
+  if (!rank || !rank.tier) return null;
   const c = tierColors[rank.tier] || tierColors.Street;
   const isMaxRank = rank.next_min_influence === null;
 

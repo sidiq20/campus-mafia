@@ -47,6 +47,7 @@ pub async fn purchase_item(
         "firewall_upgrade" => 400,
         "propaganda_boost" => 250,
         "identity_scrambler" => 100,
+        "inf_cap_bypass" => 5000,
         _ => return Err((StatusCode::BAD_REQUEST, "Invalid item".to_string())),
     };
 
@@ -87,6 +88,9 @@ pub async fn purchase_item(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Check purchase titles
+    let _ = crate::titles::check_purchase_titles(pool, user_id, &payload.item_id).await;
 
     Ok(Json(serde_json::json!({"success": true, "message": format!("Purchased {}", payload.item_id)})))
 }
@@ -152,6 +156,36 @@ pub async fn use_item(
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        },
+        "inf_cap_bypass" => {
+            // Removes daily INF cap for 24 hours
+            let has_active: Option<bool> = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'inf_cap_bypass' AND expires_at > NOW())"
+            )
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .flatten();
+
+            if has_active.unwrap_or(false) {
+                // Extend existing bypass by 24h
+                sqlx::query(
+                    "UPDATE active_effects SET expires_at = expires_at + INTERVAL '24 hours' WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'inf_cap_bypass'"
+                )
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            } else {
+                sqlx::query(
+                    "INSERT INTO active_effects (target_type, target_id, effect_id, expires_at) VALUES ('user', $1, 'inf_cap_bypass', NOW() + INTERVAL '24 hours')"
+                )
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            }
         },
         "ddos_attack" => {
             let target_id = payload.target_id.ok_or((StatusCode::BAD_REQUEST, "Target faction required".to_string()))?;

@@ -1,7 +1,7 @@
 "use client";
 
 import DashboardLayout from '@/components/DashboardLayout';
-import { Zap, Tag, Skull, Fingerprint, Shield, Bomb, Package, Loader2 } from 'lucide-react';
+import { Zap, Tag, Skull, Fingerprint, Shield, Bomb, Package, Loader2, Crown, Infinity } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { apiFetch } from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -53,6 +53,14 @@ const ITEMS = [
     icon: <Fingerprint />,
     category: 'stealth',
   },
+  {
+    id: 'inf_cap_bypass',
+    title: 'Syndicate Pass',
+    desc: 'Lifts your daily INF earning limit for 24 hours. Stack multiple to extend duration. The ultimate grind accelerator.',
+    cost: 5000,
+    icon: <Zap />,
+    category: 'economy',
+  },
 ];
 
 export default function BlackMarketPage() {
@@ -96,9 +104,10 @@ export default function BlackMarketPage() {
     return inventory?.find(i => i.item_id === itemId)?.quantity || 0;
   };
 
+  const syndicatePass = ITEMS.find(i => i.id === 'inf_cap_bypass');
   const attackItems = ITEMS.filter(i => i.category === 'attack');
   const defenseItems = ITEMS.filter(i => i.category === 'defense');
-  const utilityItems = ITEMS.filter(i => i.category === 'economy' || i.category === 'stealth');
+  const utilityItems = ITEMS.filter(i => (i.category === 'economy' || i.category === 'stealth') && i.id !== 'inf_cap_bypass');
 
   return (
     <DashboardLayout>
@@ -179,6 +188,38 @@ export default function BlackMarketPage() {
           </div>
         </div>
 
+        {/* Syndicate Pass — Premium Section */}
+        {syndicatePass && (
+          <div className="border border-yellow-500/40 bg-gradient-to-br from-yellow-500/10 to-yellow-950/20 p-6 rounded-lg shadow-[0_0_30px_rgba(250,204,21,0.15)]">
+            <div className="flex items-center gap-3 mb-2">
+              <Crown size={18} className="text-yellow-400" />
+              <h3 className="text-sm font-bold text-yellow-400 uppercase tracking-widest">
+                Premium Contraband
+              </h3>
+              <span className="px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded text-[9px] font-bold text-yellow-400 uppercase tracking-widest">
+                Most Wanted
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-500 mb-5 max-w-lg">
+              The ultimate grind accelerator. Bypass the daily INF limit and earn without restrictions for 24 hours.
+              Stack multiple purchases to extend the duration.
+            </p>
+            <div className="max-w-md">
+              <MarketItem 
+                icon={<Infinity size={18} />}
+                title={syndicatePass.title}
+                desc={syndicatePass.desc}
+                cost={syndicatePass.cost}
+                owned={getQuantity(syndicatePass.id)}
+                onBuy={() => purchaseMutation.mutate(syndicatePass.id)}
+                isPending={purchaseMutation.isPending}
+                canAfford={(user?.influence || 0) >= syndicatePass.cost}
+                premium
+              />
+            </div>
+          </div>
+        )}
+
         {/* Utility Items */}
         <div>
           <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -207,12 +248,12 @@ export default function BlackMarketPage() {
   );
 }
 
-function MarketItem({ title, desc, cost, icon, owned, onBuy, isPending, canAfford }: { 
+function MarketItem({ title, desc, cost, icon, owned, onBuy, isPending, canAfford, premium }: { 
   title: string, desc: string, cost: number, icon: React.ReactNode, owned: number, 
-  onBuy: () => void, isPending: boolean, canAfford: boolean 
+  onBuy: () => void, isPending: boolean, canAfford: boolean, premium?: boolean 
 }) {
   return (
-    <div className="border border-zinc-800 bg-black/40 p-4 rounded hover:border-yellow-500/30 transition-all group">
+    <div className={`border ${premium ? 'border-yellow-500/50 bg-yellow-950/20 hover:border-yellow-400' : 'border-zinc-800 bg-black/40 hover:border-yellow-500/30'} p-4 rounded transition-all group`}>
       <div className="flex items-center gap-3 mb-3">
         <div className="text-zinc-500 group-hover:text-yellow-500 transition-colors">
           {icon}

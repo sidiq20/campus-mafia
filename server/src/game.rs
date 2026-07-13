@@ -5,7 +5,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{ServerState, auth::AuthUser};
+use crate::{ServerState, auth::AuthUser, rank};
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct TerritoryResponse {
@@ -254,9 +254,9 @@ pub async fn create_faction(
     .await
     .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
-    // Deduct cost, set user's faction, and update last_faction_change
+    // Deduct cost, set user's faction, role as head, and update last_faction_change
     sqlx::query(
-        "UPDATE users SET influence = influence - $1, faction_id = $2, last_faction_change = NOW() WHERE id = $3"
+        "UPDATE users SET influence = influence - $1, faction_id = $2, faction_role = 'head', last_faction_change = NOW() WHERE id = $3"
     )
     .bind(cost_to_create)
     .bind(faction_id)
@@ -319,15 +319,18 @@ pub async fn join_faction(
         return Err((StatusCode::NOT_FOUND, "Faction not found".to_string()));
     }
 
-    // Update user's faction
+    // Update user's faction with default role
     sqlx::query(
-        "UPDATE users SET faction_id = $1, last_faction_change = NOW() WHERE id = $2"
+        "UPDATE users SET faction_id = $1, faction_role = 'member', last_faction_change = NOW() WHERE id = $2"
     )
     .bind(faction_id)
     .bind(user_id)
     .execute(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Check faction join titles
+    let _ = crate::titles::check_faction_join_titles(pool, user_id).await;
 
     Ok(Json(serde_json::json!({"status": "success", "message": "Joined faction successfully"})))
 }
@@ -389,11 +392,13 @@ pub async fn get_faction_by_id(
     Ok(Json(faction))
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct FactionMemberResponse {
     pub id: uuid::Uuid,
     pub username: String,
     pub influence: i32,
+    pub rank: rank::RankInfo,
+    pub faction_role: String,
 }
 
 pub async fn get_faction_members(
@@ -402,21 +407,45 @@ pub async fn get_faction_members(
 ) -> Json<Vec<FactionMemberResponse>> {
     let pool = &state.pool;
 
-    let members = sqlx::query_as::<_, FactionMemberResponse>(
+    #[derive(sqlx::FromRow)]
+    struct MemberRow {
+        id: uuid::Uuid,
+        username: String,
+        influence: i32,
+        faction_role: String,
+    }
+
+    let rows = sqlx::query_as::<_, MemberRow>(
         r#"
         SELECT 
             id, 
             username, 
-            COALESCE(influence, 0) as influence
+            COALESCE(influence, 0) as influence,
+            COALESCE(faction_role, 'member') as faction_role
         FROM users
         WHERE faction_id = $1
-        ORDER BY influence DESC
+        ORDER BY 
+            CASE faction_role
+                WHEN 'head' THEN 0
+                WHEN 'vice_head' THEN 1
+                WHEN 'executive' THEN 2
+                ELSE 3
+            END ASC,
+            influence DESC
         "#
     )
     .bind(faction_id)
     .fetch_all(pool)
     .await
     .unwrap_or_default();
+
+    let members: Vec<FactionMemberResponse> = rows.into_iter().map(|r| FactionMemberResponse {
+        id: r.id,
+        username: r.username,
+        influence: r.influence,
+        rank: rank::get_rank_info(r.influence),
+        faction_role: r.faction_role,
+    }).collect();
 
     Json(members)
 }
@@ -427,6 +456,20 @@ pub async fn leave_faction(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let pool = &state.pool;
     let user_id = auth_user.user_id;
+
+    // Check if user is head — must transfer role before leaving
+    let user_role: Option<String> = sqlx::query_scalar(
+        "SELECT faction_role FROM users WHERE id = $1"
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    if user_role.as_deref() == Some("head") {
+        return Err((StatusCode::BAD_REQUEST, "You are the faction head. Transfer your role to another member before leaving.".to_string()));
+    }
 
     let last_change: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar("SELECT last_faction_change FROM users WHERE id = $1")
         .bind(user_id)
@@ -442,7 +485,7 @@ pub async fn leave_faction(
         }
     }
 
-    let res = sqlx::query("UPDATE users SET faction_id = NULL, last_faction_change = NOW() WHERE id = $1")
+    let res = sqlx::query("UPDATE users SET faction_id = NULL, faction_role = 'member', last_faction_change = NOW() WHERE id = $1")
         .bind(user_id)
         .execute(pool)
         .await
@@ -453,4 +496,125 @@ pub async fn leave_faction(
     }
 
     Ok(Json(serde_json::json!({"status": "success", "message": "Left faction"})))
+}
+
+#[derive(Deserialize)]
+pub struct AssignRoleRequest {
+    pub target_user_id: uuid::Uuid,
+    pub role: String, // 'head', 'vice_head', 'executive', 'member'
+}
+
+pub async fn assign_role(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(faction_id): Path<uuid::Uuid>,
+    Json(payload): Json<AssignRoleRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let requester_id = auth_user.user_id;
+
+    // Validate role
+    let valid_roles = ["head", "vice_head", "executive", "member"];
+    if !valid_roles.contains(&payload.role.as_str()) {
+        return Err((StatusCode::BAD_REQUEST, "Invalid role. Must be: head, vice_head, executive, or member".to_string()));
+    }
+
+    // Verify requester is head of this faction
+    let requester_role: Option<String> = sqlx::query_scalar(
+        "SELECT faction_role FROM users WHERE id = $1 AND faction_id = $2"
+    )
+    .bind(requester_id)
+    .bind(faction_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    match requester_role.as_deref() {
+        Some("head") => {} // Allowed
+        _ => return Err((StatusCode::FORBIDDEN, "Only the faction head can assign roles".to_string())),
+    }
+
+    // Verify target is in this faction
+    let target_in_faction: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND faction_id = $2)"
+    )
+    .bind(payload.target_user_id)
+    .bind(faction_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
+
+    if !target_in_faction {
+        return Err((StatusCode::BAD_REQUEST, "Target user is not in your faction".to_string()));
+    }
+
+    // Can't demote yourself from head
+    if payload.target_user_id == requester_id && payload.role.as_str() != "head" {
+        return Err((StatusCode::BAD_REQUEST, "You cannot demote yourself. Transfer head role to another member first.".to_string()));
+    }
+
+    // If assigning head, demote current head to member
+    if payload.role == "head" && payload.target_user_id != requester_id {
+        sqlx::query(
+            "UPDATE users SET faction_role = 'member' WHERE faction_id = $1 AND faction_role = 'head'"
+        )
+        .bind(faction_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    // Enforce limits: max 1 head, 1 vice_head, 4 executives
+    if payload.role == "vice_head" {
+        // Demote existing vice_head to member
+        sqlx::query(
+            "UPDATE users SET faction_role = 'member' WHERE faction_id = $1 AND faction_role = 'vice_head' AND id != $2"
+        )
+        .bind(faction_id)
+        .bind(payload.target_user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    if payload.role == "executive" {
+        let exec_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM users WHERE faction_id = $1 AND faction_role = 'executive'"
+        )
+        .bind(faction_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+        // If target is not already executive, count them in the limit
+        let current_target_role: Option<String> = sqlx::query_scalar(
+            "SELECT faction_role FROM users WHERE id = $1"
+        )
+        .bind(payload.target_user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .flatten();
+
+        let is_already_exec = current_target_role.as_deref() == Some("executive");
+        if !is_already_exec && exec_count >= 4 {
+            return Err((StatusCode::BAD_REQUEST, "Maximum 4 executives allowed. Demote an existing executive first.".to_string()));
+        }
+    }
+
+    // Assign role
+    sqlx::query(
+        "UPDATE users SET faction_role = $1 WHERE id = $2"
+    )
+    .bind(&payload.role)
+    .bind(payload.target_user_id)
+    .execute(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Check leadership titles for the promoted user
+    let _ = crate::titles::check_leadership_titles(pool, payload.target_user_id, &payload.role).await;
+
+    Ok(Json(serde_json::json!({"status": "success", "message": format!("Role updated to {}", payload.role)})))
 }

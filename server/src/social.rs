@@ -5,7 +5,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{ServerState, auth::{AuthUser, OptionalAuthUser}};
+use crate::{ServerState, auth::{AuthUser, OptionalAuthUser}, rank};
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct CommentResponse {
@@ -56,10 +56,14 @@ pub async fn create_comment(
 
     // Reward user with 2 influence for commenting if they have an account
     if let Some(uid) = user_id {
-        let _ = sqlx::query("UPDATE users SET influence = influence + 2 WHERE id = $1")
+        let _ = crate::inf_limit::apply_inf_cap(pool, uid, 2).await;
+        let _ = crate::titles::check_comment_titles(pool, uid).await;
+        if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
             .bind(uid)
-            .execute(pool)
-            .await;
+            .fetch_optional(pool).await
+        {
+            let _ = crate::titles::check_rank_titles(pool, uid, inf).await;
+        }
     }
 
     Ok(Json(comment))
@@ -124,20 +128,25 @@ pub async fn add_reaction(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Reward user with 1 influence for reacting
-    let _ = sqlx::query("UPDATE users SET influence = influence + 1 WHERE id = $1")
+    let _ = crate::inf_limit::apply_inf_cap(pool, user_id, 1).await;
+    let _ = crate::titles::check_boost_titles(pool, user_id).await;
+    if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
         .bind(user_id)
-        .execute(pool)
-        .await;
+        .fetch_optional(pool).await
+    {
+        let _ = crate::titles::check_rank_titles(pool, user_id, inf).await;
+    }
 
     Ok(Json(serde_json::json!({"status": "success"})))
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct LeaderboardUser {
     pub id: uuid::Uuid,
     pub username: String,
     pub faction_name: Option<String>,
     pub influence: i32,
+    pub rank: rank::RankInfo,
 }
 
 pub async fn get_leaderboard(
@@ -145,7 +154,15 @@ pub async fn get_leaderboard(
 ) -> Json<Vec<LeaderboardUser>> {
     let pool = &state.pool;
 
-    let users = sqlx::query_as::<_, LeaderboardUser>(
+    #[derive(sqlx::FromRow)]
+    struct LeaderboardRow {
+        id: uuid::Uuid,
+        username: String,
+        faction_name: Option<String>,
+        influence: i32,
+    }
+
+    let rows = sqlx::query_as::<_, LeaderboardRow>(
         r#"
         SELECT 
             u.id, 
@@ -161,6 +178,14 @@ pub async fn get_leaderboard(
     .fetch_all(pool)
     .await
     .unwrap_or_default();
+
+    let users: Vec<LeaderboardUser> = rows.into_iter().map(|r| LeaderboardUser {
+        id: r.id,
+        username: r.username,
+        faction_name: r.faction_name,
+        influence: r.influence,
+        rank: rank::get_rank_info(r.influence),
+    }).collect();
 
     Json(users)
 }

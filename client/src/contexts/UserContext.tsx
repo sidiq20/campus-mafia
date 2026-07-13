@@ -23,6 +23,7 @@ export type UserProfile = {
   reputation: number;
   heat_level: number;
   rank: RankInfo;
+  faction_role: string;
 };
 
 type UserContextType = {

@@ -15,6 +15,7 @@ type Post = {
   content: string;
   influence_earned: number;
   author_name: string;
+  author_username: string | null;
   faction_name: string | null;
   is_anonymous: boolean | null;
   user_id: string | null;
@@ -82,6 +83,7 @@ export default function Dashboard() {
           content: newPost.content,
           influence_earned: 0,
           author_name: newPost.is_anonymous ? 'Anonymous' : (user?.username || 'phantom'),
+          author_username: user?.username || null,
           faction_name: newPost.is_anonymous ? null : (user?.faction_name || null),
           is_anonymous: newPost.is_anonymous,
           user_id: user?.id || null,
@@ -269,7 +271,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
             ) : (
               <div className="flex items-center gap-2">
                 <Link href={`/profile/${post.author_name}`} className="block font-bold text-sm text-zinc-200 hover:text-green-400">@{post.author_name}</Link>
-                <Link href={`/chat/${post.author_name}`} className="text-[9px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1 rounded uppercase">DM</Link>
+                <Link href={`/chat/${post.author_username || post.author_name}`} className="text-[9px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1 rounded uppercase">DM</Link>
               </div>
             )}
             <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{displayFaction}</span>
@@ -332,13 +334,14 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
               onChange={e => setCommentText(e.target.value)}
               placeholder="Add your intel..." 
               className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-4 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-200"
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && commentMutation.mutate()}
             />
             <button 
               onClick={() => commentMutation.mutate()}
               disabled={!commentText.trim() || commentMutation.isPending}
               className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50"
             >
-              Reply
+              {commentMutation.isPending ? '...' : 'Reply'}
             </button>
           </div>
         </div>

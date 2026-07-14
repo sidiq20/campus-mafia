@@ -30,6 +30,10 @@ type Mood = 'idle' | 'sleep' | 'happy' | 'wave';
 
 const MOOD_TICK = 8000; // change mood every 8s
 
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 3;
+const SCALE_STEP = 0.2;
+
 export default function PetCat({ recentActivity }: { recentActivity: string[] }) {
   const [name, setName] = useState(() => {
     if (typeof window === 'undefined') return 'Byte';
@@ -37,13 +41,21 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(name);
+  const [scale, setScale] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    const saved = localStorage.getItem('petcat-scale');
+    if (saved) {
+      try { return parseFloat(saved) || 1; } catch {}
+    }
+    return 1;
+  });
   const [pos, setPos] = useState(() => {
-    if (typeof window === 'undefined') return { x: 20, y: 0 };
+    if (typeof window === 'undefined') return { x: 20, y: 20 };
     const saved = localStorage.getItem('petcat-pos');
     if (saved) {
       try { return JSON.parse(saved); } catch {}
     }
-    return { x: 20, y: 0 };
+    return { x: 20, y: 20 };
   });
   const [dragging, setDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -95,7 +107,7 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
     e.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect) {
-      setDragOffset({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      setDragOffset({ x: e.clientX - rect.left, y: rect.bottom - e.clientY });
     }
     setDragging(true);
     setMood('wave');
@@ -107,9 +119,11 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
   useEffect(() => {
     if (!dragging) return;
     const handleMouseMove = (e: MouseEvent) => {
-      const newX = Math.min(Math.max(0, e.clientX - dragOffset.x), window.innerWidth - 120);
-      const newY = Math.min(Math.max(0, e.clientY - dragOffset.y), window.innerHeight - 130);
-      setPos({ x: newX, y: newY });
+      // Invert Y: mouse down = decrease bottom (move cat down visually)
+      const catHeight = 120 * scale;
+      const newX = Math.min(Math.max(0, e.clientX - dragOffset.x), window.innerWidth - 120 * scale);
+      const newBottom = Math.min(Math.max(0, window.innerHeight - e.clientY - dragOffset.y), window.innerHeight - catHeight);
+      setPos({ x: newX, y: newBottom });
     };
     const handleMouseUp = () => {
       setDragging(false);
@@ -129,7 +143,7 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
     const touch = e.touches[0];
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect && touch) {
-      setDragOffset({ x: touch.clientX - rect.left, y: touch.clientY - rect.top });
+      setDragOffset({ x: touch.clientX - rect.left, y: rect.bottom - touch.clientY });
     }
     setDragging(true);
     setMood('wave');
@@ -140,9 +154,11 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
     const handleTouchMove = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (!touch) return;
-      const newX = Math.min(Math.max(0, touch.clientX - dragOffset.x), window.innerWidth - 120);
-      const newY = Math.min(Math.max(0, touch.clientY - dragOffset.y), window.innerHeight - 130);
-      setPos({ x: newX, y: newY });
+      // Invert Y: touch down = decrease bottom (move cat down visually)
+      const catHeight = 120 * scale;
+      const newX = Math.min(Math.max(0, touch.clientX - dragOffset.x), window.innerWidth - 120 * scale);
+      const newBottom = Math.min(Math.max(0, window.innerHeight - touch.clientY - dragOffset.y), window.innerHeight - catHeight);
+      setPos({ x: newX, y: newBottom });
     };
     const handleTouchEnd = () => {
       setDragging(false);
@@ -157,7 +173,18 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
     };
   }, [dragging, dragOffset]); // Intentionally omit `pos` — posRef handles persistence
 
+  const changeScale = (delta: number) => {
+    setScale(prev => {
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prev + delta));
+      localStorage.setItem('petcat-scale', String(newScale));
+      return newScale;
+    });
+  };
+
   const currentArt = mood === 'sleep' ? CAT_SLEEP : (mood === 'happy' ? CAT_HAPPY : (mood === 'wave' ? CAT_WAVE : CAT_ASCII));
+
+  const catWidth = 90 * scale;
+  const catHeight = 120 * scale;
 
   return (
     <div
@@ -186,7 +213,9 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
       <div
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
+        onWheel={e => { e.preventDefault(); changeScale(e.deltaY > 0 ? -SCALE_STEP : SCALE_STEP); }}
         className="bg-black/70 border border-green-500/30 rounded-lg p-1.5 backdrop-blur-sm hover:border-green-500/60 transition-colors group shadow-lg"
+        style={{ transform: `scale(${scale})`, transformOrigin: 'bottom left' }}
       >
         <pre className="text-[8px] leading-tight text-green-400 font-bold tracking-wide select-none">
           {currentArt.join('\n')}
@@ -212,6 +241,25 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
               {name} ▸
             </button>
           )}
+        </div>
+
+        {/* Resize Controls */}
+        <div className="flex justify-center gap-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => { e.stopPropagation(); changeScale(-SCALE_STEP); }}
+            className="text-[9px] text-green-500/50 hover:text-green-400 bg-black/50 px-1.5 py-0.5 rounded border border-green-500/20 hover:border-green-500/50 transition-colors"
+            title="Shrink"
+          >
+            −
+          </button>
+          <span className="text-[8px] text-green-500/40 self-center">{Math.round(scale * 100)}%</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); changeScale(SCALE_STEP); }}
+            className="text-[9px] text-green-500/50 hover:text-green-400 bg-black/50 px-1.5 py-0.5 rounded border border-green-500/20 hover:border-green-500/50 transition-colors"
+            title="Enlarge"
+          >
+            +
+          </button>
         </div>
       </div>
     </div>

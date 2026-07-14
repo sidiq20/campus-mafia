@@ -267,6 +267,24 @@ pub async fn create_faction(
 
     tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Send faction welcome for the founder
+    let user_display: Option<String> = sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or_default()
+        .flatten();
+
+    if let Some(ref name) = user_display {
+        let _ = crate::comms::send_faction_welcome_message(
+            pool,
+            user_id,
+            faction_id,
+            name,
+            state.ws_state.as_ref(),
+        ).await;
+    }
+
     Ok(Json(serde_json::json!({"status": "success", "faction_id": faction_id})))
 }
 

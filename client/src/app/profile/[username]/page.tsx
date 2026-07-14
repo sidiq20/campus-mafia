@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { User, Shield, Zap, Target, AlertTriangle } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
+import Link from 'next/link';
 
 export default function UserProfilePage() {
   const params = useParams();
@@ -67,8 +68,14 @@ export default function UserProfilePage() {
                 </div>
               </div>
 
-              <div className="w-full md:w-auto shrink-0">
+              <div className="flex flex-col gap-2">
                 <RankBadgeFull rank={user.rank} influence={user.influence} />
+                <Link 
+                  href={`/chat/${username}`} 
+                  className="px-4 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 text-center"
+                >
+                  Message
+                </Link>
               </div>
             </div>
           </div>

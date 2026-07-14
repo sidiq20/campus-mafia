@@ -40,6 +40,7 @@ pub fn create_jwt(user_id: uuid::Uuid) -> Result<String, String> {
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
+    pub display_name: String,
     pub username: String,
     pub email: String,
     pub password: String,
@@ -80,8 +81,9 @@ pub async fn register(
 
     let hashed_pw = hash(&payload.password, DEFAULT_COST).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let user_id = sqlx::query_scalar::<_, uuid::Uuid>(
-        "INSERT INTO users (username, email, password_hash, faction_id) VALUES ($1, $2, $3, $4) RETURNING id"
+        "INSERT INTO users (display_name, username, email, password_hash, faction_id) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
+    .bind(&payload.display_name)
     .bind(&payload.username)
     .bind(&payload.email)
     .bind(&hashed_pw)
@@ -218,6 +220,7 @@ where
 #[derive(Serialize)]
 pub struct UserProfile {
     pub id: uuid::Uuid,
+    pub display_name: String,
     pub username: String,
     pub email: String,
     pub faction_id: Option<uuid::Uuid>,
@@ -238,6 +241,7 @@ pub async fn get_user_by_username(
     #[derive(sqlx::FromRow)]
     struct UserRow {
         pub id: uuid::Uuid,
+        pub display_name: String,
         pub username: String,
         pub email: String,
         pub faction_id: Option<uuid::Uuid>,
@@ -252,6 +256,7 @@ pub async fn get_user_by_username(
         r#"
         SELECT 
             u.id,
+            u.display_name,
             u.username,
             u.email,
             u.faction_id,
@@ -274,6 +279,7 @@ pub async fn get_user_by_username(
 
     let profile = UserProfile {
         id: row.id,
+        display_name: row.display_name,
         username: row.username,
         email: row.email,
         faction_id: row.faction_id,
@@ -288,6 +294,30 @@ pub async fn get_user_by_username(
     Ok(Json(profile))
 }
 
+#[derive(Deserialize)]
+pub struct UpdateProfileRequest {
+    pub display_name: Option<String>,
+}
+
+pub async fn update_profile(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<UpdateProfileRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    if let Some(display_name) = payload.display_name {
+        sqlx::query("UPDATE users SET display_name = $1 WHERE id = $2")
+            .bind(display_name)
+            .bind(auth_user.user_id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    Ok(Json(serde_json::json!({"status": "success"})))
+}
+
 pub async fn me(
     auth_user: AuthUser,
     State(state): State<crate::ServerState>,
@@ -297,6 +327,7 @@ pub async fn me(
     #[derive(sqlx::FromRow)]
     struct UserRow {
         pub id: uuid::Uuid,
+        pub display_name: String,
         pub username: String,
         pub email: String,
         pub faction_id: Option<uuid::Uuid>,
@@ -311,6 +342,7 @@ pub async fn me(
         r#"
         SELECT 
             u.id,
+            u.display_name,
             u.username,
             u.email,
             u.faction_id,
@@ -331,6 +363,7 @@ pub async fn me(
 
     let profile = UserProfile {
         id: row.id,
+        display_name: row.display_name,
         username: row.username,
         email: row.email,
         faction_id: row.faction_id,
@@ -343,4 +376,28 @@ pub async fn me(
     };
 
     Ok(Json(profile))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateProfileRequest {
+    pub display_name: Option<String>,
+}
+
+pub async fn update_profile(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<UpdateProfileRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    if let Some(display_name) = payload.display_name {
+        sqlx::query("UPDATE users SET display_name = $1 WHERE id = $2")
+            .bind(display_name)
+            .bind(auth_user.user_id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    Ok(Json(serde_json::json!({"status": "success"})))
 }

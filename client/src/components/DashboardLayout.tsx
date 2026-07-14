@@ -18,6 +18,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [chatInput, setChatInput] = useState('');
   const [isLeftOpen, setIsLeftOpen] = useState(false);
   const [isRightOpen, setIsRightOpen] = useState(false);
+  const { data: notifications } = useQuery<{is_read: boolean}[]>({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/notifications');
+      return res.ok ? res.json() : [];
+    },
+    enabled: !!user
+  });
   const wsRef = useRef<WebSocket | null>(null);
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -112,7 +120,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <NavItem href={`/factions/${user.faction_id}`} icon={<Shield size={18} className="text-purple-500" />} label="My Faction" active={pathname === `/factions/${user.faction_id}`} />
             )}
             <NavItem href="/comms" icon={<MessageSquare size={18} />} label="Comms" active={pathname === '/comms'} />
-            <NavItem href="/notifications" icon={<Bell size={18} />} label="Alerts" active={pathname === '/notifications'} />
+            <NavItem 
+              href="/notifications" 
+              icon={<Bell size={18} />} 
+              label="Alerts" 
+              active={pathname === '/notifications'} 
+              badge={notifications?.filter(n => !n.is_read).length || 0}
+            />
             <NavItem href="/black-market" icon={<Zap size={18} />} label="Black Market" active={pathname === '/black-market'} />
             <NavItem href="/profile" icon={<User size={18} />} label="Profile" active={pathname === '/profile'} />
           </nav>
@@ -193,11 +207,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 }
 
-function NavItem({ icon, label, href, active = false }: { icon: React.ReactNode, label: string, href: string, active?: boolean }) {
+function NavItem({ icon, label, href, active = false, badge = 0 }: { icon: React.ReactNode, label: string, href: string, active?: boolean, badge?: number }) {
   return (
     <Link href={href} className={`flex items-center gap-3 px-3 py-2 rounded text-sm transition-colors ${active ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}`}>
       {icon}
-      <span>{label}</span>
+      <span className="flex-1">{label}</span>
+      {badge > 0 && (
+        <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>
+      )}
     </Link>
   );
 }

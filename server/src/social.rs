@@ -12,7 +12,7 @@ pub struct CommentResponse {
     pub id: uuid::Uuid,
     pub post_id: uuid::Uuid,
     pub content: String,
-    pub author_name: String,
+    pub author_display_name: String,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -41,7 +41,7 @@ pub async fn create_comment(
             i.id,
             i.post_id,
             i.content,
-            u.username as author_name,
+            u.display_name as author_display_name,
             i.created_at
         FROM inserted i
         JOIN users u ON i.user_id = u.id
@@ -81,7 +81,7 @@ pub async fn get_comments(
             c.id,
             c.post_id,
             c.content,
-            u.username as author_name,
+            u.display_name as author_display_name,
             c.created_at
         FROM comments c
         JOIN users u ON c.user_id = u.id
@@ -144,6 +144,7 @@ pub async fn add_reaction(
 pub struct LeaderboardUser {
     pub id: uuid::Uuid,
     pub username: String,
+    pub display_name: String,
     pub faction_name: Option<String>,
     pub influence: i32,
     pub rank: rank::RankInfo,
@@ -158,6 +159,7 @@ pub async fn get_leaderboard(
     struct LeaderboardRow {
         id: uuid::Uuid,
         username: String,
+        display_name: String,
         faction_name: Option<String>,
         influence: i32,
     }
@@ -166,7 +168,8 @@ pub async fn get_leaderboard(
         r#"
         SELECT 
             u.id, 
-            u.username, 
+            u.username,
+            u.display_name,
             f.name as faction_name,
             COALESCE(u.influence, 0) as influence
         FROM users u
@@ -182,6 +185,7 @@ pub async fn get_leaderboard(
     let users: Vec<LeaderboardUser> = rows.into_iter().map(|r| LeaderboardUser {
         id: r.id,
         username: r.username,
+        display_name: r.display_name,
         faction_name: r.faction_name,
         influence: r.influence,
         rank: rank::get_rank_info(r.influence),

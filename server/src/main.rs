@@ -73,7 +73,7 @@ async fn create_post(
             i.id, 
             i.content, 
             i.influence_earned, 
-            COALESCE(u.username, 'Anonymous') as author_name, 
+            COALESCE(u.display_name, 'Anonymous') as author_name, 
             f.name as faction_name,
             i.is_anonymous,
             i.user_id,
@@ -144,7 +144,7 @@ async fn get_posts(
             p.id, 
             p.content, 
             p.influence_earned, 
-            COALESCE(u.username, 'Anonymous') as author_name, 
+            COALESCE(u.display_name, 'Anonymous') as author_name, 
             f.name as faction_name,
             p.is_anonymous,
             p.user_id,
@@ -265,7 +265,7 @@ async fn main() {
         .route("/api/auth/register", axum::routing::post(auth::register))
         .route("/api/auth/login", axum::routing::post(auth::login))
         .route("/api/auth/logout", axum::routing::post(auth::logout))
-        .route("/api/auth/me", get(auth::me))
+        .route("/api/auth/me", get(auth::me).put(auth::update_profile))
         .route("/api/users/:username", get(auth::get_user_by_username))
 
         // Social
@@ -275,7 +275,7 @@ async fn main() {
         .route("/api/notifications", axum::routing::get(notifications::get_notifications).post(notifications::mark_notifications_read))
 
         // Direct Messaging
-        .route("/api/chat/direct", axum::routing::post(dm::send_dm))
+        .route("/api/chat/direct", axum::routing::post(dm::send_dm).get(dm::get_chat_list))
         .route("/api/chat/direct/:username", axum::routing::get(dm::get_dm_history))
 
         // Posts

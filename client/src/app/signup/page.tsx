@@ -11,7 +11,7 @@ export default function SignupPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  const [formData, setFormData] = useState({ username: '', email: '', faction_name: '', password: '' });
+  const [formData, setFormData] = useState({ display_name: '', username: '', email: '', faction_name: '', password: '' });
 
   const { data: factions } = useQuery<{id: string, name: string}[]>({
     queryKey: ['factions'],
@@ -88,7 +88,22 @@ export default function SignupPage() {
           )}
           
           <div className="group">
-            <label className="block text-[10px] font-bold text-green-500 uppercase tracking-widest mb-2 group-focus-within:text-green-400 transition-colors">Netrunner Alias</label>
+            <label className="block text-[10px] font-bold text-green-500 uppercase tracking-widest mb-2 group-focus-within:text-green-400 transition-colors">Display Name</label>
+            <div className="relative flex items-center">
+              <User className="absolute left-4 w-4 h-4 text-zinc-500 group-focus-within:text-green-500 transition-colors" />
+              <input 
+                type="text" 
+                required
+                value={formData.display_name}
+                onChange={e => setFormData({...formData, display_name: e.target.value})}
+                className="w-full bg-zinc-950/80 border border-zinc-800 rounded-lg pl-12 pr-4 py-3.5 text-sm focus:border-green-500/50 focus:bg-green-950/10 outline-none transition-all shadow-inner"
+                placeholder="Real name/Alias..."
+              />
+            </div>
+          </div>
+
+          <div className="group">
+            <label className="block text-[10px] font-bold text-green-500 uppercase tracking-widest mb-2 group-focus-within:text-green-400 transition-colors">Unique Username</label>
             <div className="relative flex items-center">
               <User className="absolute left-4 w-4 h-4 text-zinc-500 group-focus-within:text-green-500 transition-colors" />
               <input 
@@ -97,7 +112,7 @@ export default function SignupPage() {
                 value={formData.username}
                 onChange={e => setFormData({...formData, username: e.target.value})}
                 className="w-full bg-zinc-950/80 border border-zinc-800 rounded-lg pl-12 pr-4 py-3.5 text-sm focus:border-green-500/50 focus:bg-green-950/10 outline-none transition-all shadow-inner"
-                placeholder="Choose alias..."
+                placeholder="Unique username for DMs..."
               />
             </div>
           </div>

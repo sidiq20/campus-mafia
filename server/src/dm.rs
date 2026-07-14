@@ -93,3 +93,39 @@ pub async fn get_dm_history(
 
     Ok(Json(dms))
 }
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ChatListItem {
+    pub username: String,
+    pub display_name: String,
+    pub last_message: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn get_chat_list(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+) -> Result<Json<Vec<ChatListItem>>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    let rows = sqlx::query_as::<_, ChatListItem>(
+        r#"
+        SELECT DISTINCT ON (u.username)
+            u.username,
+            u.display_name,
+            dm.content as last_message,
+            dm.created_at
+        FROM direct_messages dm
+        JOIN users u ON (u.id = dm.sender_id OR u.id = dm.receiver_id)
+        WHERE (dm.sender_id = $1 OR dm.receiver_id = $1)
+          AND u.id != $1
+        ORDER BY u.username, dm.created_at DESC
+        "#
+    )
+    .bind(auth_user.user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(rows))
+}

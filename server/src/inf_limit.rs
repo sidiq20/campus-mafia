@@ -7,7 +7,7 @@ use sqlx::PgPool;
 
 use crate::{ServerState, auth::AuthUser};
 
-pub const DAILY_INF_CAP: i32 = 500;
+pub const DAILY_INF_CAP: i32 = 200;
 
 /// Returns the actual INF reward after applying the daily cap.
 /// If the user has an active `inf_cap_bypass` effect, the full reward is returned.

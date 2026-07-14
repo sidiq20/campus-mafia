@@ -87,6 +87,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        // Skip typing indicators — they're handled by the DM chat page and would flood the messages array
+        if (data.type === 'TypingIndicator') return;
         setMessages(prev => [...prev, data]);
         
         let title = '';

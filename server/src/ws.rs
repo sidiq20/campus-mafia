@@ -40,6 +40,13 @@ pub enum GameEvent {
         from: Option<String>,
         target_username: String,
     },
+    /// Real-time typing indicator for DMs.
+    /// Sent by the typing user, relayed to everyone; clients filter by `target_username`.
+    TypingIndicator {
+        from_username: String,
+        target_username: String,
+        is_typing: bool,
+    },
 }
 
 pub async fn ws_handler(
@@ -67,10 +74,12 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     let tx = state.tx.clone();
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            // For MVP, parse as GameEvent::ChatMessage and rebroadcast
             if let Ok(event) = serde_json::from_str::<GameEvent>(&text) {
-                if let GameEvent::ChatMessage { .. } = event {
-                    let _ = tx.send(serde_json::to_string(&event).unwrap());
+                match &event {
+                    GameEvent::ChatMessage { .. } | GameEvent::TypingIndicator { .. } => {
+                        let _ = tx.send(serde_json::to_string(&event).unwrap());
+                    }
+                    _ => {}
                 }
             }
         }

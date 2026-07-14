@@ -1,4 +1,5 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://campus-mafia.pxxl.click';
+// Normalize API_URL — strip trailing slash to prevent double-slash bugs like //api/...
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://campus-mafia.pxxl.click').replace(/\/+$/, '');
 export const WS_URL = API_URL.replace(/^http/, 'ws');
 
 // Store and retrieve the JWT token

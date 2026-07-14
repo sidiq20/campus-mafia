@@ -349,6 +349,9 @@ async fn main() {
         .route("/api/blackmarket/purchase", axum::routing::post(blackmarket::purchase_item))
         .route("/api/blackmarket/use", axum::routing::post(blackmarket::use_item))
 
+        // Activity
+        .route("/api/activity/recent", get(crate::game::get_recent_activity))
+
         // Websocket
         .route("/api/ws", get(ws::ws_handler))
 

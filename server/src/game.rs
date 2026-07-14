@@ -618,3 +618,108 @@ pub async fn assign_role(
 
     Ok(Json(serde_json::json!({"status": "success", "message": format!("Role updated to {}", payload.role)})))
 }
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ActivityEvent {
+    pub event_type: String,
+    pub label: String,
+    pub description: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub icon: String,
+}
+
+/// Returns a mix of recent activity across the game
+pub async fn get_recent_activity(
+    State(state): State<ServerState>,
+) -> Json<Vec<ActivityEvent>> {
+    let pool = &state.pool;
+    let mut activities = Vec::new();
+
+    // Recent posts
+    if let Ok(rows) = sqlx::query_as::<_, ActivityEvent>(
+        r#"
+        SELECT 
+            'post' as event_type,
+            'New Intel Drop' as label,
+            CONCAT(COALESCE(u.display_name, 'Anonymous'), ': ', LEFT(p.content, 80)) as description,
+            p.created_at as timestamp,
+            '📡' as icon
+        FROM posts p
+        LEFT JOIN users u ON p.user_id = u.id
+        ORDER BY p.created_at DESC
+        LIMIT 5
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    {
+        activities.extend(rows);
+    }
+
+    // Leaderboard top movers (show top 3 users by influence)
+    if let Ok(rows) = sqlx::query_as::<_, ActivityEvent>(
+        r#"
+        SELECT 
+            'leaderboard' as event_type,
+            'Top Operative' as label,
+            CONCAT(u.display_name, ' — ', COALESCE(u.influence, 0), ' INF') as description,
+            u.created_at as timestamp,
+            '🏆' as icon
+        FROM users u
+        ORDER BY u.influence DESC
+        LIMIT 3
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    {
+        activities.extend(rows);
+    }
+
+    // Faction standings
+    if let Ok(rows) = sqlx::query_as::<_, ActivityEvent>(
+        r#"
+        SELECT 
+            'faction' as event_type,
+            'Faction Standing' as label,
+            CONCAT(f.name, ' — ', f.influence, ' INF (', COALESCE(mc.c, 0), ' members)') as description,
+            f.created_at as timestamp,
+            '🏴' as icon
+        FROM factions f
+        LEFT JOIN LATERAL (SELECT COUNT(*) as c FROM users u WHERE u.faction_id = f.id) mc ON true
+        ORDER BY f.influence DESC
+        LIMIT 5
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    {
+        activities.extend(rows);
+    }
+
+    // Territory control stats
+    if let Ok(rows) = sqlx::query_as::<_, ActivityEvent>(
+        r#"
+        SELECT 
+            'territory' as event_type,
+            'Territory Control' as label,
+            CONCAT(COALESCE(f.name, 'Rogue'), ' holds ', t.name, ' (DEF: ', t.defense_score, ')') as description,
+            t.created_at as timestamp,
+            '🗺️' as icon
+        FROM territories t
+        LEFT JOIN factions f ON t.controlling_faction_id = f.id
+        ORDER BY t.id
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    {
+        activities.extend(rows);
+    }
+
+    // Sort all activities by timestamp, most recent first
+    activities.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    activities.truncate(30);
+
+    Json(activities)
+}

@@ -378,32 +378,48 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                       <div className="text-xs uppercase tracking-widest">No operatives found</div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {members?.map(member => (
-                        <div key={member.id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors group ${
+                    <div className="space-y-1">
+                      {members?.map((member, idx) => (
+                        <div key={member.id} className={`flex items-center px-4 py-3 border-b border-zinc-800/40 last:border-b-0 transition-colors hover:bg-zinc-900/50 ${
                           member.faction_role === 'head'
-                            ? 'border-yellow-500/30 bg-yellow-950/20 hover:bg-yellow-950/30'
+                            ? 'bg-yellow-950/10 border-l-2 border-l-yellow-500/50'
                             : member.faction_role === 'vice_head'
-                              ? 'border-cyan-500/20 bg-cyan-950/15 hover:bg-cyan-950/25'
+                              ? 'bg-cyan-950/10 border-l-2 border-l-cyan-500/40'
                               : member.faction_role === 'executive'
-                                ? 'border-purple-500/20 bg-purple-950/15 hover:bg-purple-950/25'
-                                : 'border-zinc-800/80 bg-zinc-950/80 hover:border-purple-500/30 hover:bg-purple-950/10'
+                                ? 'bg-purple-950/10 border-l-2 border-l-purple-500/30'
+                                : idx % 2 === 0 ? 'bg-black/20' : ''
                         }`}>
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center group-hover:border-purple-500/50 transition-colors shadow-inner shrink-0">
-                              <span className="text-zinc-400 font-bold text-xs group-hover:text-purple-400 transition-colors">{member.username.substring(0, 2).toUpperCase()}</span>
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                              {member.faction_role === 'head' ? (
+                                <Crown size={16} className="text-yellow-500" />
+                              ) : member.faction_role === 'vice_head' ? (
+                                <Star size={16} className="text-cyan-400" />
+                              ) : (
+                                <span className="text-zinc-500 font-bold text-xs">{member.username.substring(0, 2).toUpperCase()}</span>
+                              )}
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <div className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors truncate">@{member.username}</div>
+                                <div className="text-sm font-bold text-zinc-200 truncate">@{member.username}</div>
                                 <ExecutiveBadgeSmall role={member.faction_role} />
                               </div>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-0.5">
                                 <RankBadgeSmall rank={member.rank} />
                               </div>
                             </div>
                           </div>
-                          <div className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded border border-yellow-500/20 shrink-0 ml-2">{member.influence} INF</div>
+                          <div className="flex items-center gap-3 shrink-0 ml-3">
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-2 w-14 bg-zinc-800 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 rounded-full" 
+                                  style={{ width: `${Math.min(100, (member.influence / 500) * 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                            <span className="text-xs font-bold text-yellow-500 w-16 text-right tabular-nums">{member.influence} INF</span>
+                          </div>
                         </div>
                       ))}
                     </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut, Activity } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut, Activity, Radio } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
@@ -170,41 +170,114 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </h3>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.length === 0 ? (
-              <div className="text-center text-zinc-600 text-[10px] py-8 uppercase tracking-widest">
-                No recent activity
-              </div>
-            ) : (
-              [...messages].reverse().slice(0, 50).map((msg, i) => (
-                <div key={i} className="text-xs border-l-2 border-green-500/30 pl-3 py-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[9px] font-bold text-green-400 truncate max-w-[120px]">
-                      {msg.type === 'NewPost' ? '📡 Broadcast' : msg.type === 'ChatMessage' ? '💬 Chat' : msg.type === 'TerritoryAttacked' ? '⚔️ Attack' : msg.type === 'TerritoryCaptured' ? '🏴 Capture' : '📢 Event'}
-                    </span>
-                    <span className="text-[8px] text-zinc-600 truncate">
-                      {msg.author || msg.territory_name || ''}
-                    </span>
-                  </div>
-                  <p className="text-zinc-400 truncate text-[10px]">
-                    {msg.content || msg.msg || `${msg.territory_name || ''} ${msg.action || ''}`}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
+          <LiveActivityFeed wsMessages={messages} />
         </div>
         
         {/* Quick Stats */}
         <div className="p-4 border-t border-green-500/20 bg-black/60">
           <div className="text-[9px] text-zinc-600 uppercase tracking-widest text-center">
-            Monitoring {messages.length} events this session
+            Monitoring {messages.length} live events this session
           </div>
         </div>
       </aside>
       <PwaInstallBanner />
     </div>
   );
+}
+
+type ActivityItem = {
+  event_type: string;
+  label: string;
+  description: string;
+  timestamp: string;
+  icon: string;
+};
+
+function LiveActivityFeed({ wsMessages }: { wsMessages: any[] }) {
+  const { user } = useUser();
+  
+  // Poll server for recent activity every 10 seconds
+  const { data: serverActivity } = useQuery<ActivityItem[]>({
+    queryKey: ['recent-activity'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/activity/recent');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
+
+  // Merge WebSocket events (most recent first) with server activity
+  const merged = useMemo(() => {
+    const wsEvents = [...wsMessages].reverse().slice(0, 15).map(msg => ({
+      event_type: msg.type || 'live',
+      label: msg.type === 'NewPost' ? '📡 Intel Drop' : msg.type === 'ChatMessage' ? '💬 Chat' : msg.type === 'TerritoryAttacked' ? '⚔️ Attack' : msg.type === 'TerritoryCaptured' ? '🏴 Capture' : '📢 Event',
+      description: msg.content || msg.msg || `${msg.territory_name || ''} ${msg.action || ''}`,
+      timestamp: new Date().toISOString(),
+      icon: msg.type === 'NewPost' ? '📡' : msg.type === 'ChatMessage' ? '💬' : msg.type === 'TerritoryAttacked' ? '⚔️' : msg.type === 'TerritoryCaptured' ? '🏴' : '📢'
+    }));
+    
+    return [...(serverActivity || []), ...wsEvents];
+  }, [wsMessages, serverActivity]);
+
+  if (merged.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+        <Radio size={32} className="text-zinc-800 mb-3" />
+        <p className="text-[10px] text-zinc-600 uppercase tracking-widest">No recent activity</p>
+        <p className="text-[8px] text-zinc-700 mt-2">Signals will appear here in real-time</p>
+      </div>
+    );
+  }
+
+  // Sort by timestamp descending
+  const sorted = [...merged].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 40);
+
+  return (
+    <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+      {sorted.map((item, i) => (
+        <ActivityCard key={`${item.event_type}-${i}`} item={item} />
+      ))}
+    </div>
+  );
+}
+
+const activityStyles: Record<string, { border: string, dot: string, bg: string }> = {
+  post: { border: 'border-l-green-500/50', dot: 'bg-green-500', bg: 'hover:bg-green-950/20' },
+  leaderboard: { border: 'border-l-yellow-500/50', dot: 'bg-yellow-500', bg: 'hover:bg-yellow-950/20' },
+  faction: { border: 'border-l-purple-500/50', dot: 'bg-purple-500', bg: 'hover:bg-purple-950/20' },
+  territory: { border: 'border-l-blue-500/50', dot: 'bg-blue-500', bg: 'hover:bg-blue-950/20' },
+  NewPost: { border: 'border-l-green-500/50', dot: 'bg-green-500', bg: 'hover:bg-green-950/20' },
+  ChatMessage: { border: 'border-l-cyan-500/50', dot: 'bg-cyan-500', bg: 'hover:bg-cyan-950/20' },
+  TerritoryAttacked: { border: 'border-l-red-500/50', dot: 'bg-red-500', bg: 'hover:bg-red-950/20' },
+  TerritoryCaptured: { border: 'border-l-orange-500/50', dot: 'bg-orange-500', bg: 'hover:bg-orange-950/20' },
+};
+
+function ActivityCard({ item }: { item: ActivityItem }) {
+  const style = activityStyles[item.event_type] || { border: 'border-l-zinc-600', dot: 'bg-zinc-500', bg: 'hover:bg-zinc-900/30' };
+  const timeAgo = getTimeAgo(item.timestamp);
+  
+  return (
+    <div className={`text-xs border-l-2 ${style.border} pl-3 py-1.5 ${style.bg} transition-colors rounded-r`}>
+      <div className="flex items-center gap-2 mb-0.5">
+        <span className="text-[10px] font-bold text-zinc-300 truncate">
+          {item.icon || '📡'} {item.label}
+        </span>
+        <span className="text-[8px] text-zinc-600 ml-auto whitespace-nowrap">{timeAgo}</span>
+      </div>
+      <p className="text-zinc-400 truncate text-[9px] leading-relaxed">
+        {item.description}
+      </p>
+    </div>
+  );
+}
+
+function getTimeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  if (diff < 60000) return 'now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return `${Math.floor(diff / 86400000)}d ago`;
 }
 
 function NavItem({ icon, label, href, active = false, badge = 0 }: { icon: React.ReactNode, label: string, href: string, active?: boolean, badge?: number }) {

@@ -283,6 +283,8 @@ async fn main() {
 
         // Direct Messaging
         .route("/api/chat/direct", axum::routing::post(dm::send_dm).get(dm::get_chat_list))
+        .route("/api/chat/direct/unread/count", axum::routing::get(dm::get_unread_dm_count))
+        .route("/api/chat/direct/:username/read", axum::routing::post(dm::mark_dms_read))
         .route("/api/chat/direct/:username", axum::routing::get(dm::get_dm_history))
 
         // Posts

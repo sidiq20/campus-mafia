@@ -34,6 +34,18 @@ export default function DirectChatPage() {
     },
   });
 
+  // Mark messages as read when opening this chat
+  useEffect(() => {
+    if (!user) return;
+    apiFetch(`/api/chat/direct/${username}/read`, { method: 'POST' })
+      .then(res => {
+        if (res.ok) {
+          queryClient.invalidateQueries({ queryKey: ['dm-unread'] });
+        }
+      })
+      .catch(() => {});
+  }, [username, user]);
+
   const mutation = useMutation({
     mutationFn: async (msg: { receiver_username: string, content: string }) => {
       const res = await apiFetch('/api/chat/direct', {

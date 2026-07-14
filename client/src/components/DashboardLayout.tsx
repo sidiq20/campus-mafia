@@ -27,8 +27,48 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
     enabled: !!user
   });
+
+  const { data: dmUnread } = useQuery<{unread: number}>({
+    queryKey: ['dm-unread'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/chat/direct/unread/count');
+      return res.ok ? res.json() : { unread: 0 };
+    },
+    refetchInterval: 15000,
+    enabled: !!user
+  });
   const wsRef = useRef<WebSocket | null>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Generate a short notification chime using Web Audio API
+  function playNotificationSound() {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sine';
+      // Pleasant two-tone chime
+      osc.frequency.setValueAtTime(880, ctx.currentTime);      // A5
+      osc.frequency.setValueAtTime(1108.73, ctx.currentTime + 0.1); // C#6
+
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (_) {
+      // Audio not available — silently skip
+    }
+  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -58,8 +98,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           title = data.from ? `DM from ${data.from}` : 'New Message';
           body = 'You have a new direct message';
           toast.info(body, { description: data.from ? `From: ${data.from}` : undefined });
+          playNotificationSound();
           // Also invalidate notifications badge so the red dot updates
           queryClient.invalidateQueries({ queryKey: ['notifications'] });
+          queryClient.invalidateQueries({ queryKey: ['dm-unread'] });
         }
         
         if (title && "Notification" in window && Notification.permission === "granted" && document.hidden) {
@@ -121,7 +163,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex-1 space-y-2">
           <nav className="flex flex-col gap-1">
             <NavItem href="/feed" icon={<Crosshair size={18} />} label="Feed" active={pathname === '/feed'} />
-            <NavItem href="/chat" icon={<MessageSquare size={18} />} label="Direct Chats" active={pathname.startsWith('/chat')} />
+            <NavItem href="/chat" icon={<MessageSquare size={18} />} label="Direct Chats" active={pathname.startsWith('/chat')} badge={dmUnread?.unread || 0} />
             <NavItem href="/territory" icon={<MapIcon size={18} />} label="Territory" active={pathname === '/territory'} />
             <NavItem href="/factions" icon={<Shield size={18} />} label="Factions" active={pathname === '/factions'} />
             {user?.faction_id && (

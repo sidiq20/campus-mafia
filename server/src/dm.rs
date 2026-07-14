@@ -134,6 +134,51 @@ pub struct ChatListItem {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+pub async fn get_unread_dm_count(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let count: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM direct_messages WHERE receiver_id = $1 AND is_read = false"
+    )
+    .bind(auth_user.user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .unwrap_or(0);
+
+    Ok(Json(serde_json::json!({ "unread": count })))
+}
+
+pub async fn mark_dms_read(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(other_username): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    let other_user_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM users WHERE username = $1"
+    )
+    .bind(&other_username)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::BAD_REQUEST, "User not found".to_string()))?;
+
+    sqlx::query(
+        "UPDATE direct_messages SET is_read = true WHERE sender_id = $1 AND receiver_id = $2"
+    )
+    .bind(other_user_id)
+    .bind(auth_user.user_id)
+    .execute(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({ "status": "marked_read" })))
+}
+
 pub async fn get_chat_list(
     auth_user: AuthUser,
     State(state): State<ServerState>,

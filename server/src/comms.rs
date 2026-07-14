@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 
 use crate::{ServerState, auth::AuthUser};
 
@@ -132,6 +133,54 @@ pub async fn send_global_chat(
     }
 
     Ok(Json(msg))
+}
+
+/// Insert a system welcome message into the global channel when a new user registers.
+pub async fn send_welcome_message(
+    pool: &PgPool,
+    new_user_id: uuid::Uuid,
+    display_name: &str,
+    ws_state: &crate::ws::AppState,
+) {
+    let content = format!("🚀 {} has joined the network. Welcome, operative!", display_name);
+
+    let result = sqlx::query_as::<_, ChatMessageResponse>(
+        r#"
+        WITH inserted AS (
+            INSERT INTO chat_messages (user_id, channel_type, content)
+            VALUES ($1, 'global', $2)
+            RETURNING id, channel_type, channel_id, content, user_id, created_at
+        )
+        SELECT 
+            i.id, 
+            i.channel_type, 
+            i.channel_id, 
+            i.content, 
+            u.username as author_name, 
+            f.name as faction_name,
+            i.created_at
+        FROM inserted i
+        JOIN users u ON i.user_id = u.id
+        LEFT JOIN factions f ON u.faction_id = f.id
+        "#
+    )
+    .bind(new_user_id)
+    .bind(&content)
+    .fetch_one(pool)
+    .await;
+
+    if let Ok(msg) = result {
+        let event = crate::ws::GameEvent::ChatMessage {
+            author: msg.author_name.clone(),
+            faction: None,
+            msg: msg.content.clone(),
+            channel_type: "global".to_string(),
+            channel_id: None,
+        };
+        if let Ok(event_json) = serde_json::to_string(&event) {
+            let _ = ws_state.tx.send(event_json);
+        }
+    }
 }
 
 pub async fn get_faction_chat(

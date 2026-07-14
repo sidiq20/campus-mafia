@@ -96,6 +96,14 @@ pub async fn register(
 
     let token = create_jwt(user_id).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
+    // Send a welcome message in global comms
+    crate::comms::send_welcome_message(
+        pool,
+        user_id,
+        &payload.display_name,
+        state.ws_state.as_ref(),
+    ).await;
+
     Ok((
         jar,
         Json(serde_json::json!({ "user_id": user_id, "username": payload.username, "token": token })),

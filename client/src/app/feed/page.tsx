@@ -23,6 +23,8 @@ type Post = {
   is_anonymous: boolean | null;
   user_id: string | null;
   reply_count: number;
+  boost_count: number;
+  repost_count: number;
   has_boosted: boolean;
   has_reposted: boolean;
   created_at: string;
@@ -32,6 +34,7 @@ type Comment = {
   id: string;
   post_id: string;
   content: string;
+  author_username: string | null;
   author_name: string;
   created_at: string;
 };
@@ -126,6 +129,8 @@ export default function Dashboard() {
           is_anonymous: newPost.is_anonymous,
           user_id: user?.id || null,
           reply_count: 0,
+          boost_count: 0,
+          repost_count: 0,
           has_boosted: false,
           has_reposted: false,
           created_at: new Date().toISOString(),
@@ -424,7 +429,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
               <span className="block font-bold text-sm text-zinc-500">Anonymous</span>
             ) : (
               <div className="flex items-center gap-2">
-                <Link href={`/profile/${post.author_name}`} className="block font-bold text-sm text-zinc-200 hover:text-green-400">@{post.author_name}</Link>
+                <Link href={`/profile/${post.author_username || post.author_name}`} className="block font-bold text-sm text-zinc-200 hover:text-green-400">@{post.author_name}</Link>
                 <Link href={`/chat/${post.author_username || post.author_name}`} className="text-[9px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1 rounded uppercase">DM</Link>
               </div>
             )}
@@ -446,7 +451,17 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
         <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono group-hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
       </Link>
       <div className="flex justify-between items-center pt-4 border-t border-zinc-800/50">
-        <div className="flex gap-4 sm:gap-6">
+        <div className="flex items-center gap-6 sm:gap-10">
+          {/* Reply */}
+          <button 
+            onClick={() => setShowComments(!showComments)}
+            className="group flex items-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors"
+            title={`${post.reply_count} Replies`}
+          >
+            <MessageSquare size={16} className="group-hover:text-blue-400 transition-colors" />
+            <span className="font-medium tabular-nums">{post.reply_count || ''}</span>
+          </button>
+          {/* Boost */}
           <button 
             onClick={() => {
               if (isAnonymousUser) {
@@ -456,38 +471,31 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
               boostMutation.mutate();
             }} 
             disabled={boostMutation.isPending || post.has_boosted}
-            className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+            className={`group flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
             title={post.has_boosted ? 'Boosted' : 'Boost'}
           >
-            <Zap size={14} className={post.has_boosted ? "fill-green-500" : ""} />
-            <span className="hidden sm:inline">{post.has_boosted ? 'Boosted' : 'Boost'}</span>
+            <Zap size={16} className={`transition-colors ${post.has_boosted ? 'fill-green-500 text-green-500' : 'group-hover:text-green-400'}`} />
+            <span className={`font-medium tabular-nums ${post.has_boosted ? 'text-green-500' : ''}`}>{post.boost_count || ''}</span>
           </button>
-          <button 
-            onClick={() => setShowComments(!showComments)}
-            className="flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-blue-400 transition-colors"
-            title={`${post.reply_count} Replies`}
-          >
-            <MessageSquare size={14} />
-            <span className="hidden sm:inline">{post.reply_count} Replies</span>
-          </button>
+          {/* Repost */}
           <button 
             onClick={() => !isAnonymousUser && repostMutation.mutate()}
             disabled={repostMutation.isPending}
-            className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${post.has_reposted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+            className={`group flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 ${post.has_reposted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
             title={post.has_reposted ? 'Reposted' : 'Repost'}
           >
-            <Repeat2 size={14} className={post.has_reposted ? 'text-green-500' : ''} />
-            <span className="hidden sm:inline">{post.has_reposted ? 'Reposted' : 'Repost'}</span>
+            <Repeat2 size={16} className={`transition-colors ${post.has_reposted ? 'text-green-500' : 'group-hover:text-green-400'}`} />
+            <span className={`font-medium tabular-nums ${post.has_reposted ? 'text-green-500' : ''}`}>{post.repost_count || ''}</span>
           </button>
+          {/* Pin (own posts only) */}
           {isMine && (
             <button 
               onClick={() => pinMutation.mutate()}
               disabled={pinMutation.isPending}
-              className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${isPinned ? 'text-yellow-500' : 'text-zinc-500 hover:text-yellow-400'}`}
+              className={`group flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 ${isPinned ? 'text-yellow-500' : 'text-zinc-500 hover:text-yellow-400'}`}
               title={isPinned ? 'Pinned' : 'Pin'}
             >
-              <Pin size={14} className={isPinned ? 'fill-yellow-500' : ''} />
-              <span className="hidden sm:inline">{isPinned ? 'Pinned' : 'Pin'}</span>
+              <Pin size={16} className={`transition-colors ${isPinned ? 'fill-yellow-500 text-yellow-500' : 'group-hover:text-yellow-400'}`} />
             </button>
           )}
         </div>
@@ -498,7 +506,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           {comments?.map(c => (
             <div key={c.id} className="text-xs flex justify-between">
               <div>
-                <Link href={`/profile/${c.author_name}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-400 hover:text-green-400 mr-3 transition-colors">@{c.author_name}</Link>
+                <Link href={`/profile/${c.author_username || c.author_name}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-400 hover:text-green-400 mr-3 transition-colors">@{c.author_name}</Link>
                 <span className="text-zinc-300"><MentionText text={c.content} /></span>
               </div>
               <span className="text-[9px] font-mono text-zinc-600">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>

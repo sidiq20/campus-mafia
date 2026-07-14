@@ -17,6 +17,7 @@ type ChatMessage = {
   channel_id: string | null;
   content: string;
   author_name: string;
+  author_display_name: string | null;
   faction_name: string | null;
   created_at: string;
 };
@@ -79,6 +80,7 @@ export default function CommsPage() {
           channel_id: activeChannel === 'global' ? null : (user?.faction_id || null),
           content: messageContent,
           author_name: user?.username || 'phantom',
+          author_display_name: user?.display_name || user?.username || 'phantom',
           faction_name: user?.faction_name || 'Unaffiliated',
           created_at: new Date().toISOString(),
         };
@@ -225,7 +227,7 @@ export default function CommsPage() {
                     <div key={msg.id} className={`flex flex-col ${msg.author_name === user?.username ? 'items-end' : 'items-start'}`}>
                       <div className="flex items-center gap-2 mb-1">
                         <Link href={`/profile/${msg.author_name}`} className={`text-xs font-bold ${msg.author_name === user?.username ? 'text-zinc-400' : 'text-zinc-300 hover:text-green-400'} transition-colors`}>
-                          @{msg.author_name}
+                          @{msg.author_display_name || msg.author_name}
                         </Link>
                         {msg.faction_name && activeChannel === 'global' && (
                           <span className="text-[10px] bg-zinc-900 text-zinc-500 px-1 rounded">{msg.faction_name}</span>

@@ -13,6 +13,7 @@ pub struct CommentResponse {
     pub post_id: uuid::Uuid,
     pub content: String,
     pub author_display_name: String,
+    pub author_username: Option<String>,
     pub parent_id: Option<uuid::Uuid>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -83,6 +84,7 @@ pub async fn create_comment(
             i.post_id,
             i.content,
             u.display_name as author_display_name,
+            u.username as author_username,
             i.created_at
         FROM inserted i
         JOIN users u ON i.user_id = u.id
@@ -96,16 +98,28 @@ pub async fn create_comment(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Reward user with 2 influence for commenting if they have an account
-    if let Some(uid) = user_id {
-        let _ = crate::inf_limit::apply_inf_cap(pool, uid, 2).await;
-        let _ = crate::titles::check_comment_titles(pool, uid).await;
-        if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
-            .bind(uid)
-            .fetch_optional(pool).await
-        {
-            let _ = crate::titles::check_rank_titles(pool, uid, inf).await;
+    // Reward the post owner with 2 influence for the reply
+    if let Ok(post_owner_id) = sqlx::query_scalar::<_, Option<uuid::Uuid>>(
+        "SELECT user_id FROM posts WHERE id = $1"
+    )
+    .bind(post_id)
+    .fetch_one(pool)
+    .await
+    {
+        if let Some(owner_id) = post_owner_id {
+            let _ = crate::inf_limit::apply_inf_cap(pool, owner_id, 2).await;
+            if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
+                .bind(owner_id)
+                .fetch_optional(pool).await
+            {
+                let _ = crate::titles::check_rank_titles(pool, owner_id, inf).await;
+            }
         }
+    }
+
+    // Still track comment titles for the commenter
+    if let Some(uid) = user_id {
+        let _ = crate::titles::check_comment_titles(pool, uid).await;
     }
     for tag in tags {
         if let Ok(Some(tagged_id)) = sqlx::query_scalar::<_, uuid::Uuid>(
@@ -142,6 +156,7 @@ pub async fn get_comments(
             c.post_id,
             c.content,
             u.display_name as author_display_name,
+            u.username as author_username,
             c.parent_id,
             c.created_at
         FROM comments c
@@ -188,15 +203,36 @@ pub async fn add_reaction(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Reward user with 1 influence for reacting
-    let _ = crate::inf_limit::apply_inf_cap(pool, user_id, 1).await;
-    let _ = crate::titles::check_boost_titles(pool, user_id).await;
-    if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
-        .bind(user_id)
-        .fetch_optional(pool).await
-    {
-        let _ = crate::titles::check_rank_titles(pool, user_id, inf).await;
+    // For boosts, reward the post owner; for other reactions, reward the reactor
+    if payload.reaction_type == "boost" {
+        if let Ok(post_owner_id) = sqlx::query_scalar::<_, Option<uuid::Uuid>>(
+            "SELECT user_id FROM posts WHERE id = $1"
+        )
+        .bind(post_id)
+        .fetch_one(pool)
+        .await
+        {
+            if let Some(owner_id) = post_owner_id {
+                let _ = crate::inf_limit::apply_inf_cap(pool, owner_id, 1).await;
+                if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
+                    .bind(owner_id)
+                    .fetch_optional(pool).await
+                {
+                    let _ = crate::titles::check_rank_titles(pool, owner_id, inf).await;
+                }
+            }
+        }
+    } else {
+        let _ = crate::inf_limit::apply_inf_cap(pool, user_id, 1).await;
+        if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool).await
+        {
+            let _ = crate::titles::check_rank_titles(pool, user_id, inf).await;
+        }
     }
+    // Track boost titles for the reactor regardless
+    let _ = crate::titles::check_boost_titles(pool, user_id).await;
 
     Ok(Json(serde_json::json!({"status": "success"})))
 }

@@ -45,6 +45,8 @@ struct PostResponse {
     is_anonymous: Option<bool>,
     user_id: Option<uuid::Uuid>,
     reply_count: Option<i64>,
+    boost_count: Option<i64>,
+    repost_count: Option<i64>,
     has_boosted: Option<bool>,
     has_reposted: Option<bool>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -109,6 +111,8 @@ async fn create_post(
             i.is_anonymous,
             i.user_id,
             0::bigint as reply_count,
+            0::bigint as boost_count,
+            0::bigint as repost_count,
             false as has_boosted,
             false as has_reposted,
             i.created_at
@@ -210,6 +214,8 @@ async fn get_post_by_id(
             p.is_anonymous,
             p.user_id,
             (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as reply_count,
+            (SELECT COUNT(*) FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') as boost_count,
+            (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id = p.id) as repost_count,
             EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has_boosted,
             EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has_reposted,
             p.created_at
@@ -263,6 +269,8 @@ async fn get_posts(
             p.is_anonymous,
             p.user_id,
             (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as reply_count,
+            (SELECT COUNT(*) FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') as boost_count,
+            (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id = p.id) as repost_count,
             EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has_boosted,
             EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has_reposted,
             p.created_at
@@ -318,7 +326,9 @@ async fn main() {
     tracing::info!("Connecting to database...");
 
     let pool = match PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections(25)
+        .acquire_timeout(std::time::Duration::from_secs(5))
+        .idle_timeout(std::time::Duration::from_secs(300))
         .connect(&database_url)
         .await
     {
@@ -483,6 +493,12 @@ async fn main() {
 
         // Rate Limit Status
         .route("/api/rate-limit/status", get(rate_limit::get_broadcast_status))
+
+        // Raid Planning
+        .route("/api/territories/:id/plan-raid", axum::routing::post(game::plan_raid))
+        .route("/api/raids/planned", get(game::get_planned_raids))
+        .route("/api/raids/:id/join", axum::routing::post(game::join_raid))
+        .route("/api/raids/:id/cancel", axum::routing::post(game::cancel_raid))
 
         // Activity
         .route("/api/activity/recent", get(crate::game::get_recent_activity))

@@ -15,6 +15,7 @@ pub struct ChatMessageResponse {
     pub channel_id: Option<uuid::Uuid>,
     pub content: String,
     pub author_name: String,
+    pub author_display_name: Option<String>,
     pub faction_name: Option<String>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -46,6 +47,7 @@ pub async fn get_global_chat(State(state): State<ServerState>) -> Json<Vec<ChatM
             c.channel_id, 
             c.content, 
             u.username as author_name, 
+            u.display_name as author_display_name,
             f.name as faction_name,
             c.created_at
         FROM chat_messages c
@@ -94,6 +96,7 @@ pub async fn send_global_chat(
             i.channel_id, 
             i.content, 
             u.username as author_name, 
+            u.display_name as author_display_name,
             f.name as faction_name,
             i.created_at
         FROM inserted i
@@ -168,6 +171,7 @@ pub async fn send_welcome_message(
             i.channel_id, 
             i.content, 
             u.username as author_name, 
+            u.display_name as author_display_name,
             f.name as faction_name,
             i.created_at
         FROM inserted i
@@ -217,6 +221,7 @@ pub async fn send_faction_welcome_message(
             i.channel_id, 
             i.content, 
             u.username as author_name, 
+            u.display_name as author_display_name,
             f.name as faction_name,
             i.created_at
         FROM inserted i
@@ -270,6 +275,7 @@ pub async fn get_faction_chat(
             c.channel_id, 
             c.content, 
             u.username as author_name, 
+            u.display_name as author_display_name,
             f.name as faction_name,
             c.created_at
         FROM chat_messages c
@@ -331,6 +337,7 @@ pub async fn send_faction_chat(
             i.channel_id, 
             i.content, 
             u.username as author_name, 
+            u.display_name as author_display_name,
             f.name as faction_name,
             i.created_at
         FROM inserted i
@@ -380,4 +387,32 @@ pub async fn send_faction_chat(
     }
 
     Ok(Json(msg))
+}
+
+/// Insert a system message into a faction's chat channel (used for raid notifications).
+pub async fn send_faction_system_message(
+    pool: &PgPool,
+    faction_id: uuid::Uuid,
+    content: &str,
+) -> Result<(), sqlx::Error> {
+    // Find a user in the faction to attribute the message to
+    let system_user: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE faction_id = $1 ORDER BY faction_role = 'head' DESC, influence DESC LIMIT 1"
+    )
+    .bind(faction_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(sys_user) = system_user {
+        sqlx::query(
+            "INSERT INTO chat_messages (user_id, channel_type, channel_id, content) VALUES ($1, 'faction', $2, $3)"
+        )
+        .bind(sys_user)
+        .bind(faction_id)
+        .bind(content)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
 }

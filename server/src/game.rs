@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use chrono::{Utc, Duration};
 
 use crate::{ServerState, auth::AuthUser, rank};
 
@@ -654,6 +655,528 @@ pub async fn assign_role(
     let _ = crate::titles::check_leadership_titles(pool, payload.target_user_id, &payload.role).await;
 
     Ok(Json(serde_json::json!({"status": "success", "message": format!("Role updated to {}", payload.role)})))
+}
+
+// ——— Raid Planning ———
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct RaidPlanResponse {
+    pub id: uuid::Uuid,
+    pub faction_id: uuid::Uuid,
+    pub target_territory_id: uuid::Uuid,
+    pub target_territory_name: String,
+    pub total_influence: i32,
+    pub status: String,
+    pub created_by: uuid::Uuid,
+    pub created_by_name: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub executes_at: chrono::DateTime<chrono::Utc>,
+    pub participant_count: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct PlanRaidRequest {
+    pub influence_commitment: i32,
+}
+
+/// Propose a raid on a territory. Starts a 30-minute planning window.
+pub async fn plan_raid(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(territory_id): Path<uuid::Uuid>,
+    Json(payload): Json<PlanRaidRequest>,
+) -> Result<Json<RaidPlanResponse>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    if payload.influence_commitment <= 0 {
+        return Err((StatusCode::BAD_REQUEST, "Must commit positive influence".to_string()));
+    }
+
+    // Get user's faction and influence
+    #[derive(sqlx::FromRow)]
+    struct UserInfo {
+        influence: Option<i32>,
+        faction_id: Option<uuid::Uuid>,
+        display_name: Option<String>,
+    }
+
+    let user_info = sqlx::query_as::<_, UserInfo>(
+        "SELECT influence, faction_id, display_name FROM users WHERE id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let user_influence = user_info.influence.unwrap_or(0);
+    let user_faction = user_info.faction_id;
+    let display_name = user_info.display_name.unwrap_or_else(|| "Unknown".to_string());
+
+    if user_faction.is_none() {
+        return Err((StatusCode::BAD_REQUEST, "You must be in a faction to plan a raid".to_string()));
+    }
+
+    if user_influence < payload.influence_commitment {
+        return Err((StatusCode::BAD_REQUEST, "Not enough influence".to_string()));
+    }
+
+    let user_faction = user_faction.unwrap();
+
+    // Check territory exists and is not owned by the faction
+    let territory_owner: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT controlling_faction_id FROM territories WHERE id = $1"
+    )
+    .bind(territory_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    if territory_owner == Some(user_faction) {
+        return Err((StatusCode::BAD_REQUEST, "Cannot plan a raid on your own territory".to_string()));
+    }
+
+    // Check DDoS
+    let is_ddosed: Option<bool> = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'faction' AND target_id = $1 AND effect_id = 'ddos_attack' AND expires_at > NOW())"
+    )
+    .bind(user_faction)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    if is_ddosed.unwrap_or(false) {
+        return Err((StatusCode::BAD_REQUEST, "Your faction is under a DDoS attack. Cannot plan raids.".to_string()));
+    }
+
+    // Check there isn't already an active plan for this territory by this faction
+    let existing_plan: bool = sqlx::query_scalar::<_, Option<bool>>(
+        "SELECT EXISTS(SELECT 1 FROM raid_plans WHERE faction_id = $1 AND target_territory_id = $2 AND status = 'planning')"
+    )
+    .bind(user_faction)
+    .bind(territory_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .unwrap_or(false);
+
+    if existing_plan {
+        return Err((StatusCode::BAD_REQUEST, "This territory already has an active raid plan from your faction".to_string()));
+    }
+
+    let now = Utc::now();
+    let executes_at = now + Duration::minutes(30);
+
+    let mut tx = pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Create the raid plan
+    let raid = sqlx::query_as::<_, RaidPlanResponse>(
+        r#"
+        WITH inserted AS (
+            INSERT INTO raid_plans (faction_id, target_territory_id, total_influence, created_by, executes_at)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, faction_id, target_territory_id, total_influence, status, created_by, created_at, executes_at
+        )
+        SELECT 
+            i.id, i.faction_id, i.target_territory_id, i.total_influence, i.status, i.created_by, i.created_at, i.executes_at,
+            t.name as target_territory_name,
+            COALESCE(u.display_name, 'Unknown') as created_by_name,
+            1::bigint as participant_count
+        FROM inserted i
+        JOIN territories t ON i.target_territory_id = t.id
+        JOIN users u ON i.created_by = u.id
+        "#
+    )
+    .bind(user_faction)
+    .bind(territory_id)
+    .bind(payload.influence_commitment)
+    .bind(user_id)
+    .bind(executes_at)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Deduct committed INF from proposer
+    sqlx::query("UPDATE users SET influence = influence - $1 WHERE id = $2")
+        .bind(payload.influence_commitment)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Record participant
+    sqlx::query(
+        "INSERT INTO raid_participants (raid_id, user_id, influence_committed) VALUES ($1, $2, $3)"
+    )
+    .bind(raid.id)
+    .bind(user_id)
+    .bind(payload.influence_commitment)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Use the updated comms notification that accepts direct parameters
+    let territory_name = &raid.target_territory_name;
+    let msg = format!("📡 @{} has proposed a raid on **{}** with **{} INF**! Join the planning phase!", display_name, territory_name, payload.influence_commitment);
+    let _ = crate::comms::send_faction_system_message(
+        pool,
+        user_faction,
+        &msg,
+    ).await;
+
+    Ok(Json(raid))
+}
+
+#[derive(Deserialize)]
+pub struct JoinRaidRequest {
+    pub influence_commitment: i32,
+}
+
+/// Join an existing planned raid and commit INF to it.
+pub async fn join_raid(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(raid_id): Path<uuid::Uuid>,
+    Json(payload): Json<JoinRaidRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    if payload.influence_commitment <= 0 {
+        return Err((StatusCode::BAD_REQUEST, "Must commit positive influence".to_string()));
+    }
+
+    // Get user info and verify they're in the raiding faction
+    #[derive(sqlx::FromRow)]
+    struct UserInfo {
+        influence: Option<i32>,
+        faction_id: Option<uuid::Uuid>,
+        display_name: Option<String>,
+    }
+
+    let user_info = sqlx::query_as::<_, UserInfo>(
+        "SELECT influence, faction_id, display_name FROM users WHERE id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let user_influence = user_info.influence.unwrap_or(0);
+    let user_faction = user_info.faction_id;
+    let display_name = user_info.display_name.unwrap_or_else(|| "Unknown".to_string());
+
+    if user_faction.is_none() {
+        return Err((StatusCode::BAD_REQUEST, "You must be in a faction to join a raid".to_string()));
+    }
+
+    if user_influence < payload.influence_commitment {
+        return Err((StatusCode::BAD_REQUEST, "Not enough influence".to_string()));
+    }
+
+    // Verify the raid exists, is in planning status, and belongs to the user's faction
+    #[derive(sqlx::FromRow)]
+    struct RaidInfo {
+        faction_id: uuid::Uuid,
+        status: String,
+        target_territory_name: Option<String>,
+        executes_at: chrono::DateTime<chrono::Utc>,
+    }
+
+    let raid_info = sqlx::query_as::<_, RaidInfo>(
+        r#"
+        SELECT r.faction_id, r.status, t.name as target_territory_name, r.executes_at
+        FROM raid_plans r
+        JOIN territories t ON r.target_territory_id = t.id
+        WHERE r.id = $1
+        "#
+    )
+    .bind(raid_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Raid plan not found".to_string()))?;
+
+    if raid_info.faction_id != user_faction.unwrap() {
+        return Err((StatusCode::FORBIDDEN, "You are not in the raiding faction".to_string()));
+    }
+
+    if raid_info.status != "planning" {
+        return Err((StatusCode::BAD_REQUEST, "This raid is no longer in the planning phase".to_string()));
+    }
+
+    if Utc::now() > raid_info.executes_at {
+        return Err((StatusCode::BAD_REQUEST, "The planning phase has ended. This raid is being executed.".to_string()));
+    }
+
+    let mut tx = pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Deduct INF from participant
+    sqlx::query("UPDATE users SET influence = influence - $1 WHERE id = $2")
+        .bind(payload.influence_commitment)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Upsert participant (add to existing commitment if already joined)
+    sqlx::query(
+        r#"
+        INSERT INTO raid_participants (raid_id, user_id, influence_committed)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (raid_id, user_id)
+        DO UPDATE SET influence_committed = raid_participants.influence_committed + EXCLUDED.influence_committed,
+                      voted_at = NOW()
+        "#
+    )
+    .bind(raid_id)
+    .bind(user_id)
+    .bind(payload.influence_commitment)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Update total influence on the raid plan
+    sqlx::query("UPDATE raid_plans SET total_influence = total_influence + $1 WHERE id = $2")
+        .bind(payload.influence_commitment)
+        .bind(raid_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Notify faction channel
+    let territory_name = raid_info.target_territory_name.as_deref().unwrap_or("Unknown");
+    let msg = format!("⚔️ @{} has joined the raid on **{}** with **{} INF**!", display_name, territory_name, payload.influence_commitment);
+    let _ = crate::comms::send_faction_system_message(
+        pool,
+        user_faction.unwrap(),
+        &msg,
+    ).await;
+
+    Ok(Json(serde_json::json!({"status": "joined", "influence_committed": payload.influence_commitment})))
+}
+
+/// Get all planned raids for the current user's faction (with auto-execution of expired plans).
+pub async fn get_planned_raids(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+) -> Result<Json<Vec<RaidPlanResponse>>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    let user_faction: Option<uuid::Uuid> = sqlx::query_scalar("SELECT faction_id FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .flatten();
+
+    if user_faction.is_none() {
+        return Ok(Json(vec![]));
+    }
+
+    let user_faction = user_faction.unwrap();
+
+    // Try to execute any expired planning raids
+    let _ = execute_expired_raids(pool, user_faction).await;
+
+    // Get active planning raids for the faction
+    let raids = sqlx::query_as::<_, RaidPlanResponse>(
+        r#"
+        SELECT 
+            r.id, r.faction_id, r.target_territory_id, r.total_influence, r.status,
+            r.created_by, r.created_at, r.executes_at,
+            t.name as target_territory_name,
+            COALESCE(u.display_name, 'Unknown') as created_by_name,
+            (SELECT COUNT(*) FROM raid_participants rp WHERE rp.raid_id = r.id) as participant_count
+        FROM raid_plans r
+        JOIN territories t ON r.target_territory_id = t.id
+        JOIN users u ON r.created_by = u.id
+        WHERE r.faction_id = $1 AND r.status = 'planning'
+        ORDER BY r.executes_at ASC
+        "#
+    )
+    .bind(user_faction)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(raids))
+}
+
+/// Cancel a planned raid (only creator or faction head can cancel).
+pub async fn cancel_raid(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(raid_id): Path<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    // Get raid info
+    #[derive(sqlx::FromRow)]
+    struct RaidInfo {
+        faction_id: uuid::Uuid,
+        created_by: uuid::Uuid,
+        status: String,
+    }
+
+    let raid_info = sqlx::query_as::<_, RaidInfo>(
+        "SELECT faction_id, created_by, status FROM raid_plans WHERE id = $1"
+    )
+    .bind(raid_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Raid plan not found".to_string()))?;
+
+    if raid_info.status != "planning" {
+        return Err((StatusCode::BAD_REQUEST, "This raid is no longer in planning phase".to_string()));
+    }
+
+    // Check if user is creator or faction head
+    let user_role: Option<String> = sqlx::query_scalar(
+        "SELECT faction_role FROM users WHERE id = $1 AND faction_id = $2"
+    )
+    .bind(user_id)
+    .bind(raid_info.faction_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    let is_creator = raid_info.created_by == user_id;
+    let is_head = user_role.as_deref() == Some("head");
+
+    if !is_creator && !is_head {
+        return Err((StatusCode::FORBIDDEN, "Only the raid creator or faction head can cancel a raid".to_string()));
+    }
+
+    let mut tx = pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Refund all participants
+    let participants = sqlx::query_as::<_, (uuid::Uuid, i32)>(
+        "SELECT user_id, influence_committed FROM raid_participants WHERE raid_id = $1"
+    )
+    .bind(raid_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    for (participant_id, committed) in participants {
+        let _ = sqlx::query("UPDATE users SET influence = influence + $1 WHERE id = $2")
+            .bind(committed)
+            .bind(participant_id)
+            .execute(&mut *tx)
+            .await;
+    }
+
+    // Mark raid as cancelled
+    sqlx::query("UPDATE raid_plans SET status = 'cancelled' WHERE id = $1")
+        .bind(raid_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({"status": "cancelled"})))
+}
+
+/// Execute all expired raid plans for a faction (called when fetching planned raids).
+async fn execute_expired_raids(pool: &sqlx::PgPool, faction_id: uuid::Uuid) -> Result<(), sqlx::Error> {
+    // Find all planning raids that have passed their execution time
+    let expired_raids = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, i32)>(
+        "SELECT id, target_territory_id, total_influence FROM raid_plans WHERE faction_id = $1 AND status = 'planning' AND executes_at <= NOW()"
+    )
+    .bind(faction_id)
+    .fetch_all(pool)
+    .await?;
+
+    for (raid_id, territory_id, total_influence) in expired_raids {
+        let mut tx = pool.begin().await?;
+
+        // Atomic claim: only process if still in planning status
+        let result = sqlx::query("UPDATE raid_plans SET status = 'completed' WHERE id = $1 AND status = 'planning'")
+            .bind(raid_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Another call already processed this raid — skip
+        if result.rows_affected() == 0 {
+            let _ = tx.rollback().await;
+            continue;
+        }
+
+        // Get territory info
+        let defense_score: Option<i32> = sqlx::query_scalar(
+            "SELECT defense_score FROM territories WHERE id = $1"
+        )
+        .bind(territory_id)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap_or(None);
+
+        let new_defense = defense_score.unwrap_or(100) - total_influence;
+
+        // Get territory name for notifications
+        let territory_name: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM territories WHERE id = $1"
+        )
+        .bind(territory_id)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap_or(None);
+
+        let raid_faction_name: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM factions WHERE id = $1"
+        )
+        .bind(faction_id)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap_or(None);
+
+        if new_defense <= 0 {
+            // Captured!
+            sqlx::query(
+                "UPDATE territories SET controlling_faction_id = $1, defense_score = 100 WHERE id = $2"
+            )
+            .bind(faction_id)
+            .bind(territory_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            // Damaged
+            sqlx::query(
+                "UPDATE territories SET defense_score = $1 WHERE id = $2"
+            )
+            .bind(new_defense)
+            .bind(territory_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+
+        // Send faction notification after transaction completes
+        let tname = territory_name.as_deref().unwrap_or("Unknown");
+        let fname = raid_faction_name.as_deref().unwrap_or("Unknown");
+        if new_defense <= 0 {
+            let msg = format!("🏴‍☠️ **Raid complete!** {} has been **captured** by {}!", tname, fname);
+            let _ = crate::comms::send_faction_system_message(pool, faction_id, &msg).await;
+        } else {
+            let msg = format!("💥 **Raid executed!** {} defense reduced to **{}** ({} INF damage)", tname, new_defense, total_influence);
+            let _ = crate::comms::send_faction_system_message(pool, faction_id, &msg).await;
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Serialize, sqlx::FromRow)]

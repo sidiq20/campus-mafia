@@ -41,6 +41,7 @@ type BoostedPost = {
   id: string;
   content: string;
   author_name: string;
+  author_username: string | null;
   created_at: string;
 };
 
@@ -432,7 +433,7 @@ function ProfileBoostedSection() {
           {boosted.map(p => (
             <div key={p.id} className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-yellow-500/20 transition-colors">
               <div className="flex items-center justify-between mb-1">
-                <Link href={`/profile/${p.author_name}`} className="text-[9px] font-bold text-yellow-600 uppercase tracking-widest hover:text-yellow-400 transition-colors">
+                <Link href={`/profile/${p.author_username || p.author_name}`} className="text-[9px] font-bold text-yellow-600 uppercase tracking-widest hover:text-yellow-400 transition-colors">
                   By @{p.author_name}
                 </Link>
                 <span className="text-[9px] font-mono text-zinc-600">

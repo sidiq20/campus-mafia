@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
-import { ArrowLeft, Zap, MessageSquare, Repeat2, Pin, Trash2, Reply } from 'lucide-react';
+import { ArrowLeft, Zap, MessageSquare, Repeat2, Trash2, Reply, User } from 'lucide-react';
 
 type Post = {
   id: string;
@@ -21,6 +21,8 @@ type Post = {
   is_anonymous: boolean | null;
   user_id: string | null;
   reply_count: number;
+  boost_count: number;
+  repost_count: number;
   has_boosted: boolean;
   has_reposted: boolean;
   created_at: string;
@@ -31,9 +33,24 @@ type Comment = {
   post_id: string;
   content: string;
   author_display_name: string;
+  author_username: string | null;
   parent_id: string | null;
   created_at: string;
 };
+
+function formatTimeAgo(dateStr: string) {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(dateStr).toLocaleDateString();
+}
 
 export default function PostDetailPage() {
   const { id } = useParams() as { id: string };
@@ -100,8 +117,11 @@ export default function PostDetailPage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex-1 flex items-center justify-center text-green-500 text-sm animate-pulse font-mono">
-          Loading transmission...
+        <div className="flex-1 flex items-center justify-center bg-[#050505]">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-green-500/30 border-t-green-500 rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-xs text-zinc-600 font-mono">Loading transmission...</p>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -110,15 +130,22 @@ export default function PostDetailPage() {
   if (!post) {
     return (
       <DashboardLayout>
-        <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm font-mono">
-          Transmission not found.
+        <div className="flex-1 flex items-center justify-center bg-[#050505]">
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3">
+              <MessageSquare size={20} className="text-zinc-600" />
+            </div>
+            <p className="text-sm text-zinc-500 font-mono">Transmission not found.</p>
+            <Link href="/feed" className="text-xs text-green-600 hover:text-green-400 mt-2 inline-block transition-colors">
+              Back to feed
+            </Link>
+          </div>
         </div>
       </DashboardLayout>
     );
   }
 
   const isMine = user?.id === post.user_id;
-  const isPinned = user?.pinned_post_id === post.id;
 
   // Build nested comment tree
   const topLevelComments = comments?.filter(c => !c.parent_id) || [];
@@ -131,94 +158,129 @@ export default function PostDetailPage() {
     }
   });
 
+  const commentCount = comments?.length || 0;
+  const boostCount = post.boost_count || 0;
+  const repostCount = post.repost_count || 0;
+
   return (
     <DashboardLayout>
-      <header className="h-16 border-b border-green-500/30 flex items-center gap-4 px-8 bg-black/60 backdrop-blur-md">
-        <Link href="/feed" className="text-zinc-500 hover:text-green-400 transition-colors">
+      <header className="h-14 border-b border-zinc-800 flex items-center gap-4 px-4 sm:px-6 bg-black/80 backdrop-blur-md sticky top-0 z-10">
+        <Link href="/feed" className="text-zinc-500 hover:text-white transition-colors p-1 -ml-1">
           <ArrowLeft size={20} />
         </Link>
-        <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text">Transmission Detail</h2>
+        <div>
+          <h1 className="text-sm font-bold text-zinc-200">Post</h1>
+        </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-        <div className="max-w-2xl mx-auto space-y-6">
-          {/* Post Card */}
-          <div className="border border-zinc-800 bg-black/60 p-6 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)]">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-sm bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
-                  <Zap size={14} />
-                </div>
-                <div>
-                  {post.is_anonymous ? (
-                    <span className="block font-bold text-sm text-zinc-500">Anonymous</span>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Link href={`/profile/${post.author_name}`} className="block font-bold text-sm text-zinc-200 hover:text-green-400">@{post.author_name}</Link>
-                      <Link href={`/chat/${post.author_username || post.author_name}`} className="text-[9px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1 rounded uppercase">DM</Link>
-                    </div>
-                  )}
-                  <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{post.is_anonymous ? 'Classified' : (post.faction_name || 'Unaffiliated')}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-[10px] font-mono text-zinc-600">
-                  {post.created_at ? new Date(post.created_at).toLocaleString() : 'Just now'}
-                </span>
-                {isMine && (
-                  <button onClick={() => deleteMutation.mutate()} className="text-zinc-600 hover:text-red-500 transition-colors">
-                    <Trash2 size={14} />
-                  </button>
+      <div className="flex-1 overflow-y-auto bg-[#050505]">
+        <div className="max-w-xl mx-auto">
+          {/* Post */}
+          <div className="px-4 sm:px-6 pt-4 pb-2 border-b border-zinc-800/50">
+            {/* Author */}
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
+                {post.is_anonymous ? (
+                  <Zap size={16} className="text-zinc-600" />
+                ) : (
+                  <User size={16} className="text-zinc-500" />
                 )}
               </div>
+              <div className="flex-1 min-w-0">
+                {post.is_anonymous ? (
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-zinc-500">Anonymous</span>
+                    <span className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[9px] text-zinc-600 uppercase font-bold">Incognito</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Link href={`/profile/${post.author_username || post.author_name}`} className="font-bold text-sm text-white hover:underline">
+                      {post.author_name}
+                    </Link>
+                    {post.author_username && (
+                      <span className="text-xs text-zinc-500">@{post.author_username}</span>
+                    )}
+                    <Link href={`/chat/${post.author_username || post.author_name}`} className="text-[10px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1.5 py-0.5 rounded transition-colors">
+                      DM
+                    </Link>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-0.5">
+                  {post.faction_name && !post.is_anonymous && (
+                    <span className="text-[10px] text-zinc-600">{post.faction_name}</span>
+                  )}
+                  {post.faction_name && !post.is_anonymous && <span className="text-zinc-800">·</span>}
+                  <span className="text-xs text-zinc-600">
+                    {post.created_at ? new Date(post.created_at).toLocaleString() : 'Just now'}
+                  </span>
+                </div>
+              </div>
+              {isMine && (
+                <button onClick={() => deleteMutation.mutate()} className="text-zinc-600 hover:text-red-400 transition-colors p-1 -mr-1" title="Delete">
+                  <Trash2 size={15} />
+                </button>
+              )}
             </div>
-            <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono"><MentionText text={post.content} /></p>
-            <div className="flex gap-4 sm:gap-6 pt-4 border-t border-zinc-800/50">
+
+            {/* Content */}
+            <div className="mb-4">
+              <p className="text-[15px] text-zinc-200 leading-relaxed whitespace-pre-wrap font-[350]">
+                <MentionText text={post.content} />
+              </p>
+            </div>
+
+            {/* Timestamp detail */}
+            <div className="pb-2 border-b border-zinc-800/30 mb-1">
+              <span className="text-xs text-zinc-600">
+                {post.created_at ? new Date(post.created_at).toLocaleString('en-US', {
+                  hour: 'numeric', minute: '2-digit', hour12: true,
+                  month: 'short', day: 'numeric', year: 'numeric'
+                }) : 'Just now'}
+              </span>
+            </div>
+
+            {/* Action bar */}
+            <div className="flex items-center justify-between py-2 max-w-md">
+              <button
+                onClick={() => {}}
+                className="group flex items-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors"
+                title={`${commentCount} Replies`}
+              >
+                <MessageSquare size={16} className="group-hover:text-blue-400 transition-colors" />
+                <span className="font-medium tabular-nums">{commentCount || ''}</span>
+              </button>
+
               <button
                 onClick={() => {
                   if (!user) { toast.error("Create an identity first."); return; }
                   boostMutation.mutate();
                 }}
                 disabled={boostMutation.isPending || post.has_boosted}
-                className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+                className={`group flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
                 title={post.has_boosted ? 'Boosted' : 'Boost'}
               >
-                <Zap size={14} className={post.has_boosted ? "fill-green-500" : ""} />
-                <span className="hidden sm:inline">{post.has_boosted ? 'Boosted' : 'Boost'}</span>
+                <Zap size={16} className={`transition-colors ${post.has_boosted ? 'fill-green-500 text-green-500' : 'group-hover:text-green-400'}`} />
+                <span className={`font-medium tabular-nums ${post.has_boosted ? 'text-green-500' : ''}`}>{boostCount || ''}</span>
               </button>
-              <button
-                onClick={() => !user && toast.error("Create an identity first.")}
-                className="flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-blue-400 transition-colors"
-                title={`${post.reply_count} Replies`}
-              >
-                <MessageSquare size={14} />
-                <span className="hidden sm:inline">{post.reply_count} Replies</span>
-              </button>
+
               <button
                 onClick={() => !user ? toast.error("Create an identity first.") : repostMutation.mutate()}
                 disabled={repostMutation.isPending}
-                className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${post.has_reposted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+                className={`group flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 ${post.has_reposted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
                 title={post.has_reposted ? 'Reposted' : 'Repost'}
               >
-                <Repeat2 size={14} className={post.has_reposted ? 'text-green-500' : ''} />
-                <span className="hidden sm:inline">{post.has_reposted ? 'Reposted' : 'Repost'}</span>
+                <Repeat2 size={16} className={`transition-colors ${post.has_reposted ? 'text-green-500' : 'group-hover:text-green-400'}`} />
+                <span className={`font-medium tabular-nums ${post.has_reposted ? 'text-green-500' : ''}`}>{repostCount || ''}</span>
               </button>
-              {isMine && (
-                <span className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest ${isPinned ? 'text-yellow-500' : 'text-zinc-600'}`}>
-                  <Pin size={14} className={isPinned ? 'fill-yellow-500' : ''} />
-                  <span className="hidden sm:inline">{isPinned ? 'Pinned' : 'Pin'}</span>
-                </span>
-              )}
             </div>
           </div>
 
+
+
           {/* Comments Section */}
-          <div className="border border-zinc-800 bg-black/40 p-6 rounded-lg">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-              <MessageSquare size={14} /> Replies ({comments?.length || 0})
-            </h3>
-            <div className="space-y-4">
-              {topLevelComments.map(comment => (
+          <div className="divide-y divide-zinc-800/30">
+            {topLevelComments.length > 0 ? (
+              topLevelComments.map(comment => (
                 <CommentThread
                   key={comment.id}
                   comment={comment}
@@ -227,16 +289,21 @@ export default function PostDetailPage() {
                   refetchComments={refetchComments}
                   depth={0}
                 />
-              ))}
-              {(!comments || comments.length === 0) && (
-                <p className="text-xs text-zinc-600 italic text-center py-4">No replies yet. Be the first to respond.</p>
-              )}
-            </div>
+              ))
+            ) : (
+              <div className="px-4 sm:px-6 py-12 text-center">
+                <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3">
+                  <MessageSquare size={18} className="text-zinc-600" />
+                </div>
+                <p className="text-sm text-zinc-500 font-medium">No replies yet</p>
+                <p className="text-xs text-zinc-600 mt-1">Be the first to respond to this broadcast.</p>
+              </div>
+            )}
+          </div>
 
-            {/* Reply Input */}
-            <div className="mt-6 pt-6 border-t border-zinc-800">
-              <ReplyForm postId={id} parentId={null} onSuccess={() => refetchComments()} placeholder="Add your intel..." />
-            </div>
+          {/* Sticky bottom reply */}
+          <div className="sticky bottom-0 border-t border-zinc-800 bg-black/90 backdrop-blur-md px-4 sm:px-6 py-3">
+            <ReplyForm postId={id} parentId={null} onSuccess={() => refetchComments()} placeholder="Post your reply..." />
           </div>
         </div>
       </div>
@@ -274,49 +341,65 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
   });
 
   return (
-    <div className={`${depth > 0 ? 'ml-6 pl-4 border-l border-zinc-800/50' : ''}`}>
-      <div className="text-xs mb-3 group">
-        <div className="flex items-center justify-between mb-1">
-          <Link href={`/profile/${comment.author_display_name}`} className="font-bold text-zinc-400 hover:text-green-400 transition-colors">
-            @{comment.author_display_name}
-            {comment.author_display_name === user?.display_name && (
-              <span className="text-[9px] text-green-600 ml-1">(you)</span>
+    <div className={`px-4 sm:px-6 py-4 ${depth > 0 ? 'ml-8 sm:ml-12 border-l-2 border-zinc-800/40' : ''}`}>
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
+          <User size={14} className="text-zinc-500" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <Link
+              href={`/profile/${comment.author_username || comment.author_display_name}`}
+              className="font-bold text-sm text-zinc-200 hover:underline"
+            >
+              {comment.author_display_name}
+            </Link>
+            {comment.author_username && (
+              <span className="text-xs text-zinc-500">@{comment.author_username}</span>
             )}
-          </Link>
-          <span className="text-[9px] font-mono text-zinc-600">
-            {comment.created_at ? new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-          </span>
+            {comment.author_display_name === user?.display_name && (
+              <span className="text-[10px] text-green-600">· you</span>
+            )}
+            <span className="text-xs text-zinc-600 ml-auto">
+              {formatTimeAgo(comment.created_at)}
+            </span>
+          </div>
+          <p className="text-sm text-zinc-300 leading-relaxed">
+            <MentionText text={comment.content} />
+          </p>
+          <div className="flex items-center gap-4 mt-1.5">
+            <button
+              onClick={() => setShowReplyForm(!showReplyForm)}
+              className="flex items-center gap-1 text-xs text-zinc-600 hover:text-green-400 transition-colors"
+            >
+              <Reply size={12} />
+              <span>Reply</span>
+            </button>
+          </div>
+
+          {showReplyForm && (
+            <div className="mt-3 mb-2">
+              <ReplyForm
+                postId={postId}
+                parentId={comment.id}
+                onSuccess={() => { setShowReplyForm(false); refetchComments(); }}
+                placeholder={`Reply to @${comment.author_username || comment.author_display_name}...`}
+              />
+            </div>
+          )}
+
+          {replies.map(reply => (
+            <CommentThread
+              key={reply.id}
+              comment={reply}
+              replies={[]}
+              postId={postId}
+              refetchComments={refetchComments}
+              depth={depth + 1}
+            />
+          ))}
         </div>
-        <p className="text-zinc-300 leading-relaxed"><MentionText text={comment.content} /></p>
-        <button
-          onClick={() => setShowReplyForm(!showReplyForm)}
-          className="text-[9px] text-zinc-600 hover:text-green-400 mt-1 flex items-center gap-1 transition-colors"
-        >
-          <Reply size={10} /> Reply
-        </button>
       </div>
-
-      {showReplyForm && (
-        <div className="ml-6 mb-3">
-          <ReplyForm
-            postId={postId}
-            parentId={comment.id}
-            onSuccess={() => { setShowReplyForm(false); refetchComments(); }}
-            placeholder={`Reply to @${comment.author_display_name}...`}
-          />
-        </div>
-      )}
-
-      {replies.map(reply => (
-        <CommentThread
-          key={reply.id}
-          comment={reply}
-          replies={[]}
-          postId={postId}
-          refetchComments={refetchComments}
-          depth={depth + 1}
-        />
-      ))}
     </div>
   );
 }
@@ -327,6 +410,7 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
   onSuccess: () => void;
   placeholder: string;
 }) {
+  const { user } = useUser();
   const [text, setText] = useState('');
 
   const mutation = useMutation({
@@ -348,21 +432,25 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
   });
 
   return (
-    <div className="flex gap-3">
+    <div className="flex items-center gap-3">
       <input
         type="text"
         value={text}
         onChange={e => setText(e.target.value)}
         placeholder={placeholder}
-        className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-4 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-200"
+        className="flex-1 bg-transparent border-none outline-none text-sm text-zinc-200 placeholder-zinc-600"
         onKeyDown={e => e.key === 'Enter' && !e.shiftKey && text.trim() && mutation.mutate()}
       />
       <button
         onClick={() => mutation.mutate()}
         disabled={!text.trim() || mutation.isPending}
-        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50"
+        className="px-4 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-full text-xs font-bold transition-all disabled:cursor-not-allowed"
       >
-        {mutation.isPending ? '...' : 'Reply'}
+        {mutation.isPending ? (
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          </span>
+        ) : 'Reply'}
       </button>
     </div>
   );

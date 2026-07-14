@@ -519,6 +519,7 @@ pub struct BoostedPost {
     pub id: uuid::Uuid,
     pub content: String,
     pub author_name: String,
+    pub author_username: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -529,7 +530,7 @@ pub async fn get_boosted_posts(
     let pool = &state.pool;
     let posts = sqlx::query_as::<_, BoostedPost>(
         r#"
-        SELECT p.id, p.content, COALESCE(u.display_name, 'Anonymous') as author_name, p.created_at
+        SELECT p.id, p.content, COALESCE(u.display_name, 'Anonymous') as author_name, u.username as author_username, p.created_at
         FROM reactions r
         JOIN posts p ON r.post_id = p.id
         LEFT JOIN users u ON p.user_id = u.id

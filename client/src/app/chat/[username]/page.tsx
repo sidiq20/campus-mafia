@@ -38,6 +38,7 @@ export default function DirectChatPage() {
       if (!res.ok) throw new Error('Failed to fetch messages');
       return res.json();
     },
+    staleTime: 10_000,
   });
 
   // Mark messages as read when opening this chat

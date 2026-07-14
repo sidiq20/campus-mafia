@@ -23,6 +23,7 @@ export default function NotificationsPage() {
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
+    staleTime: 30_000,
   });
 
   const markReadMutation = useMutation({

@@ -30,7 +30,8 @@ export default function ChatsIndexPage() {
       const res = await apiFetch(`/api/users/search?q=${encodeURIComponent(search)}`);
       return res.ok ? res.json() : [];
     },
-    enabled: search.trim().length > 0
+    enabled: search.trim().length > 0,
+    staleTime: 30_000,
   });
 
   const { data: chats } = useQuery<ChatListItem[]>({
@@ -38,7 +39,8 @@ export default function ChatsIndexPage() {
     queryFn: async () => {
       const res = await apiFetch('/api/chat/direct');
       return res.ok ? res.json() : [];
-    }
+    },
+    staleTime: 30_000,
   });
 
   return (

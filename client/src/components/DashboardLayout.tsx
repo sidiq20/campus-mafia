@@ -25,7 +25,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const res = await apiFetch('/api/notifications');
       return res.ok ? res.json() : [];
     },
-    enabled: !!user
+    enabled: !!user,
+    staleTime: 30_000,
   });
 
   const { data: dmUnread } = useQuery<{unread: number}>({
@@ -35,6 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return res.ok ? res.json() : { unread: 0 };
     },
     refetchInterval: 15000,
+    staleTime: 15_000,
     enabled: !!user
   });
   const wsRef = useRef<WebSocket | null>(null);
@@ -262,6 +264,7 @@ function LiveActivityFeed({ wsMessages }: { wsMessages: any[] }) {
       if (!res.ok) return [];
       return res.json();
     },
+    staleTime: 10_000,
     refetchInterval: 10000,
   });
 

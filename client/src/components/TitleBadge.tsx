@@ -47,6 +47,7 @@ export function TitleSection({ userId }: { userId?: string }) {
       if (!res.ok) throw new Error('Failed to load titles');
       return res.json();
     },
+    staleTime: 60_000,
   });
 
   if (isLoading) {

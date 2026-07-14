@@ -74,6 +74,7 @@ export default function BlackMarketPage() {
       if (!res.ok) throw new Error('Failed to load inventory');
       return res.json();
     },
+    staleTime: 60_000,
   });
 
   const purchaseMutation = useMutation({

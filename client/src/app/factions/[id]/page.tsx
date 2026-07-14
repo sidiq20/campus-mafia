@@ -59,6 +59,7 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
+    staleTime: 60_000,
   });
 
   const { data: members, isLoading: isLoadingMembers } = useQuery<FactionMember[]>({
@@ -68,6 +69,7 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
+    staleTime: 30_000,
   });
 
   const { data: territories } = useQuery<Territory[]>({
@@ -77,6 +79,7 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
+    staleTime: 30_000,
   });
 
   const queryClient = useQueryClient();
@@ -88,7 +91,8 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
-    enabled: !!user?.faction_name, // Only fetch if we're authenticated
+    enabled: !!user?.faction_name,
+    staleTime: 60_000,
   });
 
   const factionTerritories = territories?.filter(t => t.controlling_faction_id === faction?.id) || [];

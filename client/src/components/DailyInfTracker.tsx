@@ -19,7 +19,8 @@ export function DailyInfTracker() {
       if (!res.ok) throw new Error('Failed to load daily stats');
       return res.json();
     },
-    refetchInterval: 30_000, // Refresh every 30s
+    staleTime: 60_000,
+    refetchInterval: 30_000,
   });
 
   if (isLoading || !stats) return null;

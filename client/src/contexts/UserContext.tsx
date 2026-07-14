@@ -51,6 +51,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       return res.json();
     },
     retry: false,
+    staleTime: 30_000,
   });
 
   return (

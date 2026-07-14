@@ -164,6 +164,7 @@ function ProfileBroadcastsSection() {
       return res.json();
     },
     enabled: !!user,
+    staleTime: 30_000,
   });
 
   return (
@@ -206,6 +207,7 @@ function ProfileBoostedSection() {
       return res.json();
     },
     enabled: !!user,
+    staleTime: 30_000,
   });
 
   return (

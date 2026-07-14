@@ -62,6 +62,21 @@ async fn create_post(
     let pool = &state.pool;
     let user_id = auth_user.user_id;
 
+    // Rate limit broadcasts: max 2 per minute, 1h ban on 3rd+ attempt
+    if let Some(uid) = user_id {
+        match crate::rate_limit::check_and_record(pool, uid, crate::rate_limit::ACTION_BROADCAST).await
+            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        {
+            crate::rate_limit::RateLimitResult::Allowed => {}
+            crate::rate_limit::RateLimitResult::Banned(until) => {
+                let remaining = (until - chrono::Utc::now()).num_seconds().max(0);
+                return Err((axum::http::StatusCode::TOO_MANY_REQUESTS,
+                    format!("You have exceeded the broadcast limit. You are temporarily restricted for {} more seconds.", remaining)
+                ));
+            }
+        }
+    }
+
     let is_anon = payload.is_anonymous.unwrap_or(false) || user_id.is_none();
 
     let post = sqlx::query_as::<_, PostResponse>(

@@ -46,6 +46,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
+    staleTime: 10_000,
   });
 
   const filteredPosts = posts?.filter(post => 
@@ -103,7 +104,8 @@ export default function Dashboard() {
         queryClient.setQueryData(['me'], context.previousUser);
       }
       setContent(newPost.content);
-      toast.error('Transmission failed. Signal lost.');
+      const msg = err instanceof Error ? err.message : 'Transmission failed. Signal lost.';
+      toast.error('Broadcast Blocked', { description: msg });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
@@ -238,6 +240,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       return res.json();
     },
     enabled: showComments,
+    staleTime: 15_000,
   });
 
   const commentMutation = useMutation({

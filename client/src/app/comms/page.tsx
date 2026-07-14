@@ -44,7 +44,8 @@ export default function CommsPage() {
       return res.json();
     },
     enabled: !!activeChannel && (activeChannel === 'global' || !!user?.faction_id),
-    refetchInterval: 2000, // Fallback polling in case WS misses something
+    staleTime: 5_000,
+    refetchInterval: 2000,
   });
 
   const mutation = useMutation({

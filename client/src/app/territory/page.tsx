@@ -40,6 +40,7 @@ export default function TerritoryPage() {
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
+    staleTime: 30_000,
   });
 
   const { data: inventory } = useQuery<InventoryItem[]>({
@@ -49,6 +50,7 @@ export default function TerritoryPage() {
       if (!res.ok) return [];
       return res.json();
     },
+    staleTime: 60_000,
   });
 
   const { data: factions } = useQuery<Faction[]>({
@@ -58,6 +60,7 @@ export default function TerritoryPage() {
       if (!res.ok) return [];
       return res.json();
     },
+    staleTime: 60_000,
   });
 
   const attackMutation = useMutation({

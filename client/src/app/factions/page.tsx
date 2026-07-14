@@ -30,6 +30,7 @@ export default function FactionsPage() {
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
+    staleTime: 60_000,
   });
 
   const isUnaffiliated = !user?.faction_name;

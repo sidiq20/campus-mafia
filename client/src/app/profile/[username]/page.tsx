@@ -18,7 +18,8 @@ export default function UserProfilePage() {
       const res = await apiFetch(`/api/users/${username}`);
       if (!res.ok) throw new Error('Failed to fetch user');
       return res.json();
-    }
+    },
+    staleTime: 60_000,
   });
 
   if (isLoading) {

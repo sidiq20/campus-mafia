@@ -16,6 +16,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, isLoading } = useUser();
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<{type: string, [key: string]: any}[]>([]);
+  const [typingFriends, setTypingFriends] = useState<string[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isLeftOpen, setIsLeftOpen] = useState(false);
   const [isRightOpen, setIsRightOpen] = useState(false);
@@ -89,8 +90,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        // Skip typing indicators — they're handled by the DM chat page and would flood the messages array
-        if (data.type === 'TypingIndicator') return;
+        
+        // Track typing indicators for the cat
+        if (data.type === 'TypingIndicator') {
+          setTypingFriends(prev => {
+            if (data.is_typing) {
+              if (prev.includes(data.from_username)) return prev;
+              return [...prev, data.from_username];
+            }
+            return prev.filter(n => n !== data.from_username);
+          });
+          return;
+        }
         setMessages(prev => [...prev, data]);
         
         let title = '';
@@ -157,7 +168,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <button onClick={() => setIsRightOpen(true)}><Bell className="text-green-500 w-6 h-6" /></button>
       </div>
 
-      <aside ref={sidebarRef} className={`w-64 border-r border-green-500/20 bg-black p-4 flex flex-col gap-6 fixed inset-y-0 left-0 z-40 transform transition-transform md:relative md:translate-x-0 ${isLeftOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside ref={sidebarRef} className={`w-64 border-r border-green-500/20 bg-black p-4 flex flex-col gap-6 fixed inset-y-0 left-0 z-40 transform transition-transform md:relative md:translate-x-0 pb-20 md:pb-4 ${isLeftOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <button className="md:hidden absolute top-4 right-4" onClick={() => setIsLeftOpen(false)}><X className="text-zinc-500 w-5 h-5"/></button>
         <div className="flex items-center gap-2 mb-4">
           <Skull className="text-green-500 h-6 w-6" />
@@ -237,9 +248,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <PwaInstallBanner />
       <PetCat recentActivity={(() => {
         const latest = messages[messages.length - 1];
-        if (!latest) return [];
-        const text = latest.msg || latest.content || `${latest.type}${latest.author ? ' by @'+latest.author : latest.territory_name ? ' on '+latest.territory_name : ''}`;
-        return text ? [text] : [];
+        const act: string[] = [];
+        // Add typing indicators
+        if (typingFriends.length > 0) {
+          act.push(`💬 @${typingFriends[0]} is typing${typingFriends.length > 1 ? ` +${typingFriends.length - 1} more` : ''}...`);
+        }
+        if (latest) {
+          const text = latest.msg || latest.content || `${latest.type}${latest.author ? ' by @'+latest.author : latest.territory_name ? ' on '+latest.territory_name : ''}`;
+          if (text) act.push(text);
+        }
+        return act;
       })()} />
 
       {/* Bottom Navigation — Mobile Only */}

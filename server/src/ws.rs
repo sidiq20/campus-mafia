@@ -47,6 +47,15 @@ pub enum GameEvent {
         target_username: String,
         is_typing: bool,
     },
+    /// Real-time direct message — sent so the recipient sees the message instantly.
+    NewDirectMessage {
+        sender_id: String,
+        sender_username: String,
+        receiver_username: String,
+        content: String,
+        reply_to_content: Option<String>,
+        created_at: String,
+    },
 }
 
 pub async fn ws_handler(

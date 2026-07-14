@@ -3,7 +3,7 @@ import { Skull, ChevronRight, Shield, Zap, Terminal, Globe } from 'lucide-react'
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen w-full bg-[#050505] text-zinc-100 font-mono relative overflow-hidden">
+    <div className="min-h-screen w-full bg-[#050505] text-zinc-100 font-mono relative">
       {/* Cyberpunk background elements */}
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
       

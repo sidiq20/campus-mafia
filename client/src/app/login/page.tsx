@@ -48,15 +48,15 @@ export default function LoginPage() {
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-green-500/10 blur-[100px] rounded-full pointer-events-none"></div>
 
-      <div className="relative z-10 w-full max-w-md p-10 border border-green-500/30 bg-black/80 backdrop-blur-xl rounded-2xl shadow-[0_0_50px_rgba(34,197,94,0.15)] animate-slide-in">
+      <div className="relative z-10 w-full max-w-md p-6 sm:p-10 border border-green-500/30 bg-black/80 backdrop-blur-xl rounded-2xl shadow-[0_0_50px_rgba(34,197,94,0.15)] animate-slide-in mx-4">
         <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full blur-[50px] pointer-events-none -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[50px] pointer-events-none translate-y-1/2 -translate-x-1/2"></div>
         
-        <div className="flex flex-col items-center mb-10 relative z-10">
-          <div className="w-20 h-20 rounded-full bg-green-500/10 border-2 border-green-500/50 flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
-            <Skull className="text-green-400 drop-shadow-[0_0_10px_rgba(34,197,94,0.8)] w-10 h-10" />
+        <div className="flex flex-col items-center mb-6 sm:mb-10 relative z-10">
+          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-green-500/10 border-2 border-green-500/50 flex items-center justify-center mb-4 sm:mb-6 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+            <Skull className="text-green-400 drop-shadow-[0_0_10px_rgba(34,197,94,0.8)] w-7 h-7 sm:w-10 sm:h-10" />
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600 uppercase drop-shadow-[0_0_10px_rgba(34,197,94,0.3)] animate-pulse-glow">Dept.OS</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600 uppercase drop-shadow-[0_0_10px_rgba(34,197,94,0.3)] animate-pulse-glow">Dept.OS</h1>
           <p className="text-xs text-zinc-500 uppercase tracking-widest mt-2">Authorized Personnel Only</p>
         </div>
 
@@ -78,7 +78,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-5 relative z-10">
+        <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5 relative z-10">
           <div className="group">
             <label className="block text-[10px] font-bold text-green-500 uppercase tracking-widest mb-2 group-focus-within:text-green-400 transition-colors">Alias or Email</label>
             <div className="relative flex items-center">

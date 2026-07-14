@@ -12,6 +12,8 @@ pub struct DirectMessage {
     pub sender_id: uuid::Uuid,
     pub receiver_id: uuid::Uuid,
     pub content: String,
+    pub reply_to_id: Option<uuid::Uuid>,
+    pub reply_to_content: Option<String>,
     pub is_read: bool,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -20,6 +22,7 @@ pub struct DirectMessage {
 pub struct SendDMRequest {
     pub receiver_username: String,
     pub content: String,
+    pub reply_to_id: Option<uuid::Uuid>,
 }
 
 pub async fn send_dm(
@@ -43,16 +46,36 @@ pub async fn send_dm(
         return Err((StatusCode::BAD_REQUEST, "Cannot send message to yourself".to_string()));
     }
 
+    // Look up reply content if replying to a message
+    let reply_content: Option<String> = if let Some(reply_id) = payload.reply_to_id {
+        sqlx::query_scalar("SELECT content FROM direct_messages WHERE id = $1 AND (sender_id = $2 OR receiver_id = $2)")
+            .bind(reply_id)
+            .bind(auth_user.user_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    } else {
+        None
+    };
+
     let dm = sqlx::query_as::<_, DirectMessage>(
         r#"
-        INSERT INTO direct_messages (sender_id, receiver_id, content)
-        VALUES ($1, $2, $3)
-        RETURNING id, sender_id, receiver_id, content, is_read, created_at
+        WITH inserted AS (
+            INSERT INTO direct_messages (sender_id, receiver_id, content, reply_to_id)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, sender_id, receiver_id, content, reply_to_id, is_read, created_at
+        )
+        SELECT 
+            i.id, i.sender_id, i.receiver_id, i.content, i.reply_to_id,
+            (SELECT content FROM direct_messages WHERE id = i.reply_to_id) as reply_to_content,
+            i.is_read, i.created_at
+        FROM inserted i
         "#
     )
     .bind(auth_user.user_id)
     .bind(receiver_id)
     .bind(&payload.content)
+    .bind(payload.reply_to_id)
     .fetch_one(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -89,6 +112,21 @@ pub async fn send_dm(
         let _ = state.ws_state.tx.send(event_json);
     }
 
+    // Broadcast the actual message data so the recipient sees it in real-time
+    let sender_user = auth_user.user_id;
+    let sender_name_for_ws = sender_name.clone().unwrap_or_else(|| "Unknown".to_string());
+    let realtime_event = crate::ws::GameEvent::NewDirectMessage {
+        sender_id: sender_user.to_string(),
+        sender_username: sender_name_for_ws,
+        receiver_username: payload.receiver_username.clone(),
+        content: payload.content.clone(),
+        reply_to_content: reply_content.clone(),
+        created_at: dm.created_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+    };
+    if let Ok(event_json) = serde_json::to_string(&realtime_event) {
+        let _ = state.ws_state.tx.send(event_json);
+    }
+
     Ok(Json(dm))
 }
 
@@ -110,11 +148,14 @@ pub async fn get_dm_history(
 
     let dms = sqlx::query_as::<_, DirectMessage>(
         r#"
-        SELECT id, sender_id, receiver_id, content, is_read, created_at
-        FROM direct_messages
-        WHERE (sender_id = $1 AND receiver_id = $2)
-           OR (sender_id = $2 AND receiver_id = $1)
-        ORDER BY created_at ASC
+        SELECT 
+            dm.id, dm.sender_id, dm.receiver_id, dm.content, dm.reply_to_id,
+            (SELECT content FROM direct_messages WHERE id = dm.reply_to_id) as reply_to_content,
+            dm.is_read, dm.created_at
+        FROM direct_messages dm
+        WHERE (dm.sender_id = $1 AND dm.receiver_id = $2)
+           OR (dm.sender_id = $2 AND dm.receiver_id = $1)
+        ORDER BY dm.created_at ASC
         "#
     )
     .bind(auth_user.user_id)

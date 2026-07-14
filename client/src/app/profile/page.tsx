@@ -23,6 +23,7 @@ import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays
 import { RankBadgeFull } from '@/components/RankBadge';
 import { TitleSection } from '@/components/TitleBadge';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
+import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -290,7 +291,7 @@ function ProfilePostCard({ post, isMine, queryClient }: { post: Post; isMine: bo
   return (
     <div className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-all">
       <Link href={`/posts/${post.id}`} className="block">
-        <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors">{post.content}</p>
+        <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
       </Link>
       <div className="flex items-center gap-4 pt-3 border-t border-zinc-800/50">
         <button onClick={() => boostMutation.mutate()} disabled={boostMutation.isPending || post.has_boosted}
@@ -438,7 +439,7 @@ function ProfileBoostedSection() {
                   {new Date(p.created_at).toLocaleDateString()}
                 </span>
               </div>
-              <p className="text-xs text-zinc-300 leading-relaxed">{p.content}</p>
+              <p className="text-xs text-zinc-300 leading-relaxed"><MentionText text={p.content} /></p>
             </div>
           ))}
         </div>

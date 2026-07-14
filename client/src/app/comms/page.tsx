@@ -7,6 +7,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BroadcastCooldown } from '@/components/BroadcastCooldown';
 import { toast } from 'sonner';
+import { MentionText } from '@/components/MentionText';
 import { apiFetch, WS_URL } from '@/lib/api';
 
 type ChatMessage = {
@@ -248,7 +249,7 @@ export default function CommsPage() {
                           ? (activeChannel === 'global' ? 'bg-green-500/20 text-green-100 border border-green-500/30' : 'bg-purple-500/20 text-purple-100 border border-purple-500/30')
                           : 'bg-zinc-900 text-zinc-200 border border-zinc-800'
                       }`}>
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        <p className="text-sm whitespace-pre-wrap"><MentionText text={msg.content} /></p>
                       </div>
                     </div>
                   ))

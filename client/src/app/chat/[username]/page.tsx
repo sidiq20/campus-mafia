@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { MentionText } from '@/components/MentionText';
 import { apiFetch, WS_URL } from '@/lib/api';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
@@ -271,7 +272,7 @@ export default function DirectChatPage() {
                       </div>
                     )}
                     <div className={`p-3 sm:p-4 rounded-lg border ${myMsg ? 'bg-green-500/10 border-green-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800 rounded-tl-sm'}`}>
-                      <p className="text-sm text-zinc-100 font-mono">{msg.content}</p>
+                      <p className="text-sm text-zinc-100 font-mono"><MentionText text={msg.content} /></p>
                       <div className="flex items-center justify-between gap-2 mt-1.5">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[9px] text-zinc-500">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

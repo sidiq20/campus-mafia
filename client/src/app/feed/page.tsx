@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
 import { BroadcastCooldown } from '@/components/BroadcastCooldown';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
 
@@ -225,7 +226,7 @@ export default function Dashboard() {
                         <span className="mx-1.5 text-zinc-700">·</span>
                         {p.created_at ? new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}
                       </div>
-                      <p className="text-xs text-zinc-300 truncate">{p.content}</p>
+                      <p className="text-xs text-zinc-300 truncate"><MentionText text={p.content} /></p>
                     </div>
                   ))}
                 </div>
@@ -442,7 +443,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
         </div>
       </div>
       <Link href={`/posts/${post.id}`} className="block group">
-        <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono group-hover:text-green-300 transition-colors">{post.content}</p>
+        <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono group-hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
       </Link>
       <div className="flex justify-between items-center pt-4 border-t border-zinc-800/50">
         <div className="flex gap-4 sm:gap-6">
@@ -498,7 +499,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
             <div key={c.id} className="text-xs flex justify-between">
               <div>
                 <span className="font-bold text-zinc-400 mr-3">@{c.author_name}</span>
-                <span className="text-zinc-300">{c.content}</span>
+                <span className="text-zinc-300"><MentionText text={c.content} /></span>
               </div>
               <span className="text-[9px] font-mono text-zinc-600">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             </div>

@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
+import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
 import { ArrowLeft, Zap, MessageSquare, Repeat2, Pin, Trash2, Reply } from 'lucide-react';
@@ -171,7 +172,7 @@ export default function PostDetailPage() {
                 )}
               </div>
             </div>
-            <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono">{post.content}</p>
+            <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono"><MentionText text={post.content} /></p>
             <div className="flex gap-4 sm:gap-6 pt-4 border-t border-zinc-800/50">
               <button
                 onClick={() => {
@@ -286,7 +287,7 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
             {comment.created_at ? new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
           </span>
         </div>
-        <p className="text-zinc-300 leading-relaxed">{comment.content}</p>
+        <p className="text-zinc-300 leading-relaxed"><MentionText text={comment.content} /></p>
         <button
           onClick={() => setShowReplyForm(!showReplyForm)}
           className="text-[9px] text-zinc-600 hover:text-green-400 mt-1 flex items-center gap-1 transition-colors"

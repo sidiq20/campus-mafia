@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import { User, Shield, Zap, Target, AlertTriangle, Radio, MessageSquare, Pin } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
@@ -197,7 +198,7 @@ function OtherUserPostCard({ post }: { post: Post }) {
   return (
     <div className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-all">
       <Link href={`/posts/${post.id}`} className="block">
-        <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors">{post.content}</p>
+        <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
       </Link>
       <div className="flex items-center gap-4 pt-3 border-t border-zinc-800/50">
         <button onClick={handleBoost} disabled={boostMutation.isPending || post.has_boosted}

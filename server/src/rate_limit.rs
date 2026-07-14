@@ -1,4 +1,11 @@
+use axum::{
+    extract::State,
+    Json,
+};
+use serde::Serialize;
 use sqlx::PgPool;
+
+use crate::{ServerState, auth::AuthUser};
 
 /// Action types that are rate-limited
 pub const ACTION_BROADCAST: &str = "broadcast";
@@ -84,10 +91,69 @@ pub async fn check_and_record(
     Ok(RateLimitResult::Allowed)
 }
 
-#[derive(sqlx::FromRow)]
-struct RateLimitRow {
+#[derive(Serialize, sqlx::FromRow)]
+pub struct RateLimitRow {
     count: i32,
-    #[allow(dead_code)]
-    window_start: chrono::DateTime<chrono::Utc>,
-    banned_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub window_start: chrono::DateTime<chrono::Utc>,
+    pub banned_until: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Serialize)]
+pub struct RateLimitStatus {
+    pub used: i32,
+    pub max: i32,
+    pub banned_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub window_reset: chrono::DateTime<chrono::Utc>,
+}
+
+/// Return the current broadcast rate-limit status for the logged-in user (read-only, no upsert).
+pub async fn get_broadcast_status(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+) -> Json<RateLimitStatus> {
+    let pool = &state.pool;
+    let now = chrono::Utc::now();
+
+    let row = sqlx::query_as::<_, RateLimitRow>(
+        r#"
+        SELECT count, window_start, banned_until
+        FROM rate_limits
+        WHERE user_id = $1 AND action_type = $2
+        "#
+    )
+    .bind(auth_user.user_id)
+    .bind(ACTION_BROADCAST)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    match row {
+        Some(r) => {
+            // If the window has expired, the count effectively resets
+            let window_expired = r.window_start < now - chrono::Duration::minutes(1);
+            let used = if window_expired { 0 } else { r.count };
+            let window_reset = if window_expired {
+                now
+            } else {
+                r.window_start + chrono::Duration::minutes(1)
+            };
+
+            // Only return banned_until if it's still active
+            let banned = r.banned_until.filter(|b| *b > now);
+
+            Json(RateLimitStatus {
+                used,
+                max: MAX_ACTIONS_PER_WINDOW,
+                banned_until: banned,
+                window_reset,
+            })
+        }
+        None => Json(RateLimitStatus {
+            used: 0,
+            max: MAX_ACTIONS_PER_WINDOW,
+            banned_until: None,
+            window_reset: now,
+        }),
+    }
 }

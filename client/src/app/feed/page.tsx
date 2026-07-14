@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
+import { BroadcastCooldown } from '@/components/BroadcastCooldown';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
 
@@ -151,7 +152,8 @@ export default function Dashboard() {
             rows={3}
           ></textarea>
           <div className="flex justify-between items-center mt-4 border-t border-zinc-800 pt-4">
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <BroadcastCooldown />
               <span className="text-[10px] text-zinc-500 uppercase tracking-widest"><TrendingUp size={10} className="inline mr-1" />+10 INF Reward</span>
               <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors">
                 <input 

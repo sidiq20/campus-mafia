@@ -5,6 +5,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { MessageSquare, Lock, Send, ArrowLeft } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { BroadcastCooldown } from '@/components/BroadcastCooldown';
 import { toast } from 'sonner';
 import { apiFetch, WS_URL } from '@/lib/api';
 
@@ -257,6 +258,9 @@ export default function CommsPage() {
 
               {/* Input Area */}
               <div className="p-4 border-t border-zinc-800 bg-black/40">
+                <div className="flex items-center justify-between mb-2">
+                  <BroadcastCooldown />
+                </div>
                 <form onSubmit={handleSend} className="flex gap-2">
                   <input
                     type="text"

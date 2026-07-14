@@ -369,6 +369,9 @@ async fn main() {
         .route("/api/blackmarket/purchase", axum::routing::post(blackmarket::purchase_item))
         .route("/api/blackmarket/use", axum::routing::post(blackmarket::use_item))
 
+        // Rate Limit Status
+        .route("/api/rate-limit/status", get(rate_limit::get_broadcast_status))
+
         // Activity
         .route("/api/activity/recent", get(crate::game::get_recent_activity))
 

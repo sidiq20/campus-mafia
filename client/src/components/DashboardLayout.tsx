@@ -200,7 +200,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="mt-auto p-4 border border-zinc-800 rounded bg-zinc-950/50">
           {user ? (
             <>
-              <div className="font-bold text-green-400">@{user.username}</div>
+              <Link href="/profile" className="font-bold text-green-400 hover:text-green-300 transition-colors">@{user.username}</Link>
               <button 
                 onClick={() => {
                   clearToken();

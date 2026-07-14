@@ -91,8 +91,8 @@ export default function ChatsIndexPage() {
                       <User size={14} className="text-zinc-500" />
                     </div>
                     <div>
-                      <span className="block font-bold text-zinc-200">{user.display_name}</span>
-                      <span className="text-[10px] text-zinc-500">@{user.username}</span>
+                      <Link href={`/profile/${user.username}`} onClick={(e) => e.stopPropagation()} className="block font-bold text-zinc-200 hover:text-green-400 transition-colors">{user.display_name}</Link>
+                      <Link href={`/profile/${user.username}`} onClick={(e) => e.stopPropagation()} className="text-[10px] text-zinc-500 hover:text-green-400 transition-colors">@{user.username}</Link>
                     </div>
                   </div>
                 </Link>
@@ -110,7 +110,7 @@ export default function ChatsIndexPage() {
                 >
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-bold text-zinc-200 truncate">{chat.display_name}</span>
+                      <Link href={`/profile/${chat.username}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-200 hover:text-green-400 truncate transition-colors">{chat.display_name}</Link>
                       {chat.unread_count > 0 && (
                         <span className="bg-green-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,255,65,0.4)]">
                           {chat.unread_count}

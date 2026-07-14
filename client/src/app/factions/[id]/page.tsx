@@ -341,7 +341,7 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                       {members?.filter(m => m.id !== user?.id).map(member => (
                         <div key={member.id} className="flex items-center justify-between p-2.5 rounded-lg bg-black/40 border border-zinc-800/50">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs font-bold text-zinc-300 truncate">@{member.username}</span>
+                            <Link href={`/profile/${member.username}`} className="text-xs font-bold text-zinc-300 hover:text-green-400 truncate transition-colors">@{member.username}</Link>
                             <ExecutiveBadgeSmall role={member.faction_role} />
                           </div>
                           <div className="flex items-center gap-1.5">
@@ -405,7 +405,7 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <div className="text-sm font-bold text-zinc-200 truncate max-w-[120px] sm:max-w-none">@{member.username}</div>
+                                <Link href={`/profile/${member.username}`} className="text-sm font-bold text-zinc-200 hover:text-green-400 truncate max-w-[120px] sm:max-w-none transition-colors">@{member.username}</Link>
                                 <ExecutiveBadgeSmall role={member.faction_role} />
                               </div>
                               <div className="flex items-center gap-2 mt-1 sm:mt-0.5 flex-wrap">

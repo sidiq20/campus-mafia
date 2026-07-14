@@ -277,12 +277,12 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
     <div className={`${depth > 0 ? 'ml-6 pl-4 border-l border-zinc-800/50' : ''}`}>
       <div className="text-xs mb-3 group">
         <div className="flex items-center justify-between mb-1">
-          <span className="font-bold text-zinc-400">
+          <Link href={`/profile/${comment.author_display_name}`} className="font-bold text-zinc-400 hover:text-green-400 transition-colors">
             @{comment.author_display_name}
             {comment.author_display_name === user?.display_name && (
               <span className="text-[9px] text-green-600 ml-1">(you)</span>
             )}
-          </span>
+          </Link>
           <span className="text-[9px] font-mono text-zinc-600">
             {comment.created_at ? new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
           </span>

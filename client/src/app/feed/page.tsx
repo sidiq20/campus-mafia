@@ -498,7 +498,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           {comments?.map(c => (
             <div key={c.id} className="text-xs flex justify-between">
               <div>
-                <span className="font-bold text-zinc-400 mr-3">@{c.author_name}</span>
+                <Link href={`/profile/${c.author_name}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-400 hover:text-green-400 mr-3 transition-colors">@{c.author_name}</Link>
                 <span className="text-zinc-300"><MentionText text={c.content} /></span>
               </div>
               <span className="text-[9px] font-mono text-zinc-600">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>

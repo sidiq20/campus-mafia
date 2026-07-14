@@ -9,6 +9,7 @@ import { BroadcastCooldown } from '@/components/BroadcastCooldown';
 import { toast } from 'sonner';
 import { MentionText } from '@/components/MentionText';
 import { apiFetch, WS_URL } from '@/lib/api';
+import Link from 'next/link';
 
 type ChatMessage = {
   id: string;
@@ -223,9 +224,9 @@ export default function CommsPage() {
                   messages?.map(msg => (
                     <div key={msg.id} className={`flex flex-col ${msg.author_name === user?.username ? 'items-end' : 'items-start'}`}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-xs font-bold ${msg.author_name === user?.username ? 'text-zinc-400' : 'text-zinc-300'}`}>
+                        <Link href={`/profile/${msg.author_name}`} className={`text-xs font-bold ${msg.author_name === user?.username ? 'text-zinc-400' : 'text-zinc-300 hover:text-green-400'} transition-colors`}>
                           @{msg.author_name}
-                        </span>
+                        </Link>
                         {msg.faction_name && activeChannel === 'global' && (
                           <span className="text-[10px] bg-zinc-900 text-zinc-500 px-1 rounded">{msg.faction_name}</span>
                         )}

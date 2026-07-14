@@ -143,9 +143,18 @@ async fn create_post(
                 END,
                 daily_inf_earned = CASE
                     WHEN EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'inf_cap_bypass' AND expires_at > NOW())
-                    THEN daily_inf_earned + 10
-                    WHEN last_inf_reset < DATE_TRUNC('day', NOW()) THEN 10
-                    ELSE daily_inf_earned + 10
+                    THEN daily_inf_earned + CASE
+                        WHEN EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'propaganda_boost' AND expires_at > NOW())
+                        THEN 20 ELSE 10
+                    END
+                    WHEN last_inf_reset < DATE_TRUNC('day', NOW()) THEN CASE
+                        WHEN EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'propaganda_boost' AND expires_at > NOW())
+                        THEN 20 ELSE 10
+                    END
+                    ELSE daily_inf_earned + CASE
+                        WHEN EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'propaganda_boost' AND expires_at > NOW())
+                        THEN 20 ELSE 10
+                    END
                 END,
                 last_inf_reset = CASE
                     WHEN last_inf_reset < DATE_TRUNC('day', NOW()) THEN NOW()

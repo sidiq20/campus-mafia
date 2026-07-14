@@ -56,6 +56,17 @@ struct CreatePostRequest {
     is_anonymous: Option<bool>,
 }
 
+fn extract_tags(content: &str) -> Vec<String> {
+    content
+        .split_whitespace()
+        .filter(|w| w.starts_with('@') && w.len() > 1)
+        .map(|w| {
+            let w = w.trim_start_matches('@');
+            w.trim_end_matches(|c: char| !c.is_alphanumeric()).to_string()
+        })
+        .collect()
+}
+
 async fn create_post(
     auth_user: OptionalAuthUser,
     State(state): State<ServerState>,
@@ -137,6 +148,32 @@ async fn create_post(
         {
             let _ = crate::titles::check_rank_titles(pool, uid, inf).await;
             let _ = crate::titles::check_lone_wolf_title(pool, uid, inf).await;
+        }
+    }
+
+    // Process @mentions in the broadcast
+    let tags = extract_tags(&payload.content);
+    for tag in tags {
+        if let Ok(Some(tagged_id)) = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM users WHERE username = $1"
+        )
+        .bind(&tag)
+        .fetch_optional(pool)
+        .await
+        {
+            let notif_msg = if is_anon {
+                format!("An anonymous operative mentioned you in a broadcast")
+            } else {
+                format!("@{} mentioned you in a broadcast", post.author_name)
+            };
+            let _ = sqlx::query(
+                "INSERT INTO notifications (user_id, content) VALUES ($1, $2)"
+            )
+            .bind(tagged_id)
+            .bind(&notif_msg)
+            .execute(pool)
+            .await;
+            let _ = crate::push::notify_user(pool, tagged_id).await;
         }
     }
 

@@ -61,6 +61,16 @@ pub async fn create_comment(
         }
     }
 
+    // Extract @mentions BEFORE moving payload.content into the query
+    let tags: Vec<String> = payload.content
+        .split_whitespace()
+        .filter(|w| w.starts_with('@') && w.len() > 1)
+        .map(|w| {
+            let w = w.trim_start_matches('@');
+            w.trim_end_matches(|c: char| !c.is_alphanumeric()).to_string()
+        })
+        .collect();
+
     let comment = sqlx::query_as::<_, CommentResponse>(
         r#"
         WITH inserted AS (
@@ -95,6 +105,24 @@ pub async fn create_comment(
             .fetch_optional(pool).await
         {
             let _ = crate::titles::check_rank_titles(pool, uid, inf).await;
+        }
+    }
+    for tag in tags {
+        if let Ok(Some(tagged_id)) = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM users WHERE username = $1"
+        )
+        .bind(&tag)
+        .fetch_optional(pool)
+        .await
+        {
+            let _ = sqlx::query(
+                "INSERT INTO notifications (user_id, content) VALUES ($1, $2)"
+            )
+            .bind(tagged_id)
+            .bind(format!("@{} mentioned you in a reply", comment.author_display_name))
+            .execute(pool)
+            .await;
+            let _ = crate::push::notify_user(pool, tagged_id).await;
         }
     }
 

@@ -174,26 +174,26 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10 gap-6">
                   <div>
                     <div className="inline-block px-3 py-1 bg-green-500/10 border border-green-500/30 rounded text-xs font-bold text-green-400 mb-4 uppercase tracking-widest">Syndicate Profile</div>
-                    <h1 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600 mb-3 tracking-tighter uppercase drop-shadow-[0_0_15px_rgba(34,197,94,0.3)]">{faction.name}</h1>
+                    <h1 className="text-2xl sm:text-3xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600 mb-3 tracking-tighter uppercase drop-shadow-[0_0_15px_rgba(34,197,94,0.3)] break-words">{faction.name}</h1>
                     <p className="text-zinc-400 max-w-lg text-sm leading-relaxed border-l-2 border-zinc-800 pl-4">{faction.description || 'No classified intel available on this syndicate. Operate with caution.'}</p>
                   </div>
-                  <div className="flex-shrink-0 p-6 rounded-full bg-black/50 border border-zinc-800 shadow-[inset_0_0_20px_rgba(34,197,94,0.05)]">
-                    <Shield className={isMyFaction ? "text-green-500 drop-shadow-[0_0_10px_rgba(34,197,94,0.8)]" : "text-zinc-600"} size={56} />
+                  <div className="flex-shrink-0 p-3 sm:p-4 md:p-6 rounded-full bg-black/50 border border-zinc-800 shadow-[inset_0_0_20px_rgba(34,197,94,0.05)]">
+                    <Shield className={isMyFaction ? "text-green-500 drop-shadow-[0_0_10px_rgba(34,197,94,0.8)]" : "text-zinc-600"} size={32} />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10 relative z-10 border-t border-zinc-800/50 pt-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-6 sm:mt-10 relative z-10 border-t border-zinc-800/50 pt-6">
                   <div className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-900 hover:border-green-500/30 transition-colors">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Users size={12} className="text-purple-400"/> Operatives</div>
-                    <div className="text-2xl font-bold text-zinc-200">{faction.member_count} <span className="text-xs text-zinc-600 font-normal">/ 50</span></div>
+                    <div className="text-lg sm:text-2xl font-bold text-zinc-200">{faction.member_count} <span className="text-[10px] sm:text-xs text-zinc-600 font-normal">/ 50</span></div>
                   </div>
                   <div className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-900 hover:border-yellow-500/30 transition-colors">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Activity size={12} className="text-yellow-400"/> Influence</div>
-                    <div className="text-2xl font-bold text-yellow-500">{faction.influence}</div>
+                    <div className="text-lg sm:text-2xl font-bold text-yellow-500">{faction.influence}</div>
                   </div>
                   <div className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-900 hover:border-blue-500/30 transition-colors">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Crosshair size={12} className="text-blue-400"/> Zones</div>
-                    <div className="text-2xl font-bold text-zinc-200">{factionTerritories.length}</div>
+                    <div className="text-lg sm:text-2xl font-bold text-zinc-200">{factionTerritories.length}</div>
                   </div>
                   <div className="p-4 rounded-lg bg-zinc-950/50 border border-zinc-900 hover:border-green-500/30 transition-colors">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Shield size={12} className="text-green-400"/> Status</div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut } from 'lucide-react';
+import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
@@ -146,7 +146,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <aside className={`w-80 border-l border-green-500/20 bg-black flex flex-col fixed inset-y-0 right-0 z-40 transform transition-transform md:relative md:translate-x-0 ${isRightOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <button className="md:hidden absolute top-4 left-4 z-50" onClick={() => setIsRightOpen(false)}><X className="text-zinc-500 w-5 h-5"/></button>
-        {/* Simplified Right Sidebar for brevity - same logic as before */}
+        
+        {/* Live Activity Feed */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-green-500/20">
+            <h3 className="text-[10px] font-bold text-green-500 uppercase tracking-widest flex items-center gap-2">
+              <Activity size={12} />
+              Live Activity
+            </h3>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {messages.length === 0 ? (
+              <div className="text-center text-zinc-600 text-[10px] py-8 uppercase tracking-widest">
+                No recent activity
+              </div>
+            ) : (
+              [...messages].reverse().slice(0, 50).map((msg, i) => (
+                <div key={i} className="text-xs border-l-2 border-green-500/30 pl-3 py-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[9px] font-bold text-green-400 truncate max-w-[120px]">
+                      {msg.type === 'NewPost' ? '📡 Broadcast' : msg.type === 'ChatMessage' ? '💬 Chat' : msg.type === 'TerritoryAttacked' ? '⚔️ Attack' : msg.type === 'TerritoryCaptured' ? '🏴 Capture' : '📢 Event'}
+                    </span>
+                    <span className="text-[8px] text-zinc-600 truncate">
+                      {msg.author || msg.territory_name || ''}
+                    </span>
+                  </div>
+                  <p className="text-zinc-400 truncate text-[10px]">
+                    {msg.content || msg.msg || `${msg.territory_name || ''} ${msg.action || ''}`}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        
+        {/* Quick Stats */}
+        <div className="p-4 border-t border-green-500/20 bg-black/60">
+          <div className="text-[9px] text-zinc-600 uppercase tracking-widest text-center">
+            Monitoring {messages.length} events this session
+          </div>
+        </div>
       </aside>
       <PwaInstallBanner />
     </div>

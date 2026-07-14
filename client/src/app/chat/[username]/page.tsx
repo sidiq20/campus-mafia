@@ -41,14 +41,17 @@ export default function DirectChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(msg)
       });
-      if (!res.ok) throw new Error('Failed to send message');
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Failed to send message');
+        throw new Error(errText);
+      }
       return res.json();
     },
     onSuccess: () => {
       setContent('');
       queryClient.invalidateQueries({ queryKey: ['chat', username] });
     },
-    onError: () => toast.error('Transmission failed')
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Transmission failed')
   });
 
   useEffect(() => {
@@ -82,7 +85,7 @@ export default function DirectChatPage() {
               onChange={e => setContent(e.target.value)}
               className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-4 py-3 text-sm outline-none focus:border-green-500/50 text-zinc-200"
               placeholder="Secure transmission..."
-              onKeyPress={e => e.key === 'Enter' && mutation.mutate({ receiver_username: username, content })}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && mutation.mutate({ receiver_username: username, content })}
             />
             <button 
               onClick={() => mutation.mutate({ receiver_username: username, content })}

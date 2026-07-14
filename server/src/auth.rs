@@ -230,6 +230,7 @@ pub struct UserProfile {
     pub heat_level: i32,
     pub rank: RankInfo,
     pub faction_role: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 pub async fn get_user_by_username(
@@ -250,6 +251,7 @@ pub async fn get_user_by_username(
         pub reputation: i32,
         pub heat_level: i32,
         pub faction_role: Option<String>,
+        pub created_at: chrono::DateTime<chrono::Utc>,
     }
 
     let row = sqlx::query_as::<_, UserRow>(
@@ -264,7 +266,8 @@ pub async fn get_user_by_username(
             COALESCE(u.influence, 0) as influence,
             COALESCE(u.reputation, 0) as reputation,
             COALESCE(u.heat_level, 0) as heat_level,
-            u.faction_role
+            u.faction_role,
+            u.created_at
         FROM users u
         LEFT JOIN factions f ON u.faction_id = f.id
         WHERE u.username = $1
@@ -289,6 +292,7 @@ pub async fn get_user_by_username(
         heat_level: row.heat_level,
         rank: rank::get_rank_info(row.influence),
         faction_role: row.faction_role.unwrap_or_else(|| "member".to_string()),
+        created_at: row.created_at,
     };
 
     Ok(Json(profile))
@@ -312,6 +316,7 @@ pub async fn me(
         pub reputation: i32,
         pub heat_level: i32,
         pub faction_role: Option<String>,
+        pub created_at: chrono::DateTime<chrono::Utc>,
     }
 
     let row = sqlx::query_as::<_, UserRow>(
@@ -326,7 +331,8 @@ pub async fn me(
             COALESCE(u.influence, 0) as influence,
             COALESCE(u.reputation, 0) as reputation,
             COALESCE(u.heat_level, 0) as heat_level,
-            u.faction_role
+            u.faction_role,
+            u.created_at
         FROM users u
         LEFT JOIN factions f ON u.faction_id = f.id
         WHERE u.id = $1
@@ -349,7 +355,30 @@ pub async fn me(
         heat_level: row.heat_level,
         rank: rank::get_rank_info(row.influence),
         faction_role: row.faction_role.unwrap_or_else(|| "member".to_string()),
+        created_at: row.created_at,
     };
 
     Ok(Json(profile))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateProfileRequest {
+    pub display_name: String,
+}
+
+pub async fn update_profile(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<UpdateProfileRequest>,
+) -> Result<Json<UserProfile>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    sqlx::query("UPDATE users SET display_name = $1 WHERE id = $2")
+        .bind(&payload.display_name)
+        .bind(auth_user.user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    me(auth_user, State(state)).await
 }

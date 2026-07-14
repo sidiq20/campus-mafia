@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 
 export type RankInfo = {
@@ -15,6 +15,7 @@ export type RankInfo = {
 
 export type UserProfile = {
   id: string;
+  display_name: string;
   username: string;
   email: string;
   faction_id: string | null;
@@ -24,20 +25,23 @@ export type UserProfile = {
   heat_level: number;
   rank: RankInfo;
   faction_role: string;
+  created_at: string;
 };
 
 type UserContextType = {
   user: UserProfile | null;
   isLoading: boolean;
+  refetch: UseQueryResult['refetch'];
 };
 
 const UserContext = createContext<UserContextType>({
   user: null,
   isLoading: true,
+  refetch: async () => ({ data: undefined } as any),
 });
 
 export const UserProvider = ({ children }: { children: React.ReactNode }) => {
-  const { data: user, isLoading } = useQuery<UserProfile>({
+  const { data: user, isLoading, refetch } = useQuery<UserProfile>({
     queryKey: ['me'],
     queryFn: async () => {
       const res = await apiFetch('/api/auth/me');
@@ -50,7 +54,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   });
 
   return (
-    <UserContext.Provider value={{ user: user || null, isLoading }}>
+    <UserContext.Provider value={{ user: user || null, isLoading, refetch }}>
       {children}
     </UserContext.Provider>
   );

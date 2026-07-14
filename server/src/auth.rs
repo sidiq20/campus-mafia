@@ -7,7 +7,9 @@ use axum_extra::extract::cookie::{Cookie, CookieJar};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
+use std::collections::HashMap;
 use std::env;
 
 use crate::rank::{self, RankInfo};
@@ -233,6 +235,7 @@ pub struct UserProfile {
     pub display_name: String,
     pub username: String,
     pub email: String,
+    pub bio: String,
     pub faction_id: Option<uuid::Uuid>,
     pub faction_name: Option<String>,
     pub influence: i32,
@@ -240,6 +243,8 @@ pub struct UserProfile {
     pub heat_level: i32,
     pub rank: RankInfo,
     pub faction_role: String,
+    pub pinned_post_id: Option<uuid::Uuid>,
+    pub pinned_post_content: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -255,12 +260,14 @@ pub async fn get_user_by_username(
         pub display_name: String,
         pub username: String,
         pub email: String,
+        pub bio: String,
         pub faction_id: Option<uuid::Uuid>,
         pub faction_name: Option<String>,
         pub influence: i32,
         pub reputation: i32,
         pub heat_level: i32,
         pub faction_role: Option<String>,
+        pub pinned_post_id: Option<uuid::Uuid>,
         pub created_at: chrono::DateTime<chrono::Utc>,
     }
 
@@ -271,12 +278,14 @@ pub async fn get_user_by_username(
             u.display_name,
             u.username,
             u.email,
+            COALESCE(u.bio, '') as bio,
             u.faction_id,
             f.name as faction_name,
             COALESCE(u.influence, 0) as influence,
             COALESCE(u.reputation, 0) as reputation,
             COALESCE(u.heat_level, 0) as heat_level,
             u.faction_role,
+            u.pinned_post_id,
             u.created_at
         FROM users u
         LEFT JOIN factions f ON u.faction_id = f.id
@@ -290,11 +299,24 @@ pub async fn get_user_by_username(
 
     let row = row.ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
 
+    // Fetch pinned post content if pinned
+    let pinned_content: Option<String> = if row.pinned_post_id.is_some() {
+        sqlx::query_scalar("SELECT content FROM posts WHERE id = $1")
+            .bind(row.pinned_post_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
     let profile = UserProfile {
         id: row.id,
         display_name: row.display_name,
         username: row.username,
         email: row.email,
+        bio: row.bio,
         faction_id: row.faction_id,
         faction_name: row.faction_name,
         influence: row.influence,
@@ -302,6 +324,8 @@ pub async fn get_user_by_username(
         heat_level: row.heat_level,
         rank: rank::get_rank_info(row.influence),
         faction_role: row.faction_role.unwrap_or_else(|| "member".to_string()),
+        pinned_post_id: row.pinned_post_id,
+        pinned_post_content: pinned_content,
         created_at: row.created_at,
     };
 
@@ -320,12 +344,14 @@ pub async fn me(
         pub display_name: String,
         pub username: String,
         pub email: String,
+        pub bio: String,
         pub faction_id: Option<uuid::Uuid>,
         pub faction_name: Option<String>,
         pub influence: i32,
         pub reputation: i32,
         pub heat_level: i32,
         pub faction_role: Option<String>,
+        pub pinned_post_id: Option<uuid::Uuid>,
         pub created_at: chrono::DateTime<chrono::Utc>,
     }
 
@@ -336,12 +362,14 @@ pub async fn me(
             u.display_name,
             u.username,
             u.email,
+            COALESCE(u.bio, '') as bio,
             u.faction_id,
             f.name as faction_name,
             COALESCE(u.influence, 0) as influence,
             COALESCE(u.reputation, 0) as reputation,
             COALESCE(u.heat_level, 0) as heat_level,
             u.faction_role,
+            u.pinned_post_id,
             u.created_at
         FROM users u
         LEFT JOIN factions f ON u.faction_id = f.id
@@ -353,11 +381,24 @@ pub async fn me(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Fetch pinned post content if pinned
+    let pinned_content: Option<String> = if row.pinned_post_id.is_some() {
+        sqlx::query_scalar("SELECT content FROM posts WHERE id = $1")
+            .bind(row.pinned_post_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
     let profile = UserProfile {
         id: row.id,
         display_name: row.display_name,
         username: row.username,
         email: row.email,
+        bio: row.bio,
         faction_id: row.faction_id,
         faction_name: row.faction_name,
         influence: row.influence,
@@ -365,6 +406,8 @@ pub async fn me(
         heat_level: row.heat_level,
         rank: rank::get_rank_info(row.influence),
         faction_role: row.faction_role.unwrap_or_else(|| "member".to_string()),
+        pinned_post_id: row.pinned_post_id,
+        pinned_post_content: pinned_content,
         created_at: row.created_at,
     };
 
@@ -373,7 +416,8 @@ pub async fn me(
 
 #[derive(Deserialize)]
 pub struct UpdateProfileRequest {
-    pub display_name: String,
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
 }
 
 pub async fn update_profile(
@@ -383,12 +427,23 @@ pub async fn update_profile(
 ) -> Result<Json<UserProfile>, (StatusCode, String)> {
     let pool = &state.pool;
 
-    sqlx::query("UPDATE users SET display_name = $1 WHERE id = $2")
-        .bind(&payload.display_name)
-        .bind(auth_user.user_id)
-        .execute(pool)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if let Some(name) = &payload.display_name {
+        sqlx::query("UPDATE users SET display_name = $1 WHERE id = $2")
+            .bind(name)
+            .bind(auth_user.user_id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    if let Some(bio) = &payload.bio {
+        sqlx::query("UPDATE users SET bio = $1 WHERE id = $2")
+            .bind(bio)
+            .bind(auth_user.user_id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
 
     me(auth_user, State(state)).await
 }
@@ -489,4 +544,340 @@ pub async fn get_boosted_posts(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(posts))
+}
+
+// ——— Pin / Unpin Posts ———
+
+#[derive(Deserialize)]
+pub struct PinPostRequest {
+    pub post_id: Option<uuid::Uuid>,
+}
+
+pub async fn pin_post(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<PinPostRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    // Verify the post belongs to the user
+    if let Some(pid) = payload.post_id {
+        let is_owner: bool = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND user_id = $2)"
+        )
+        .bind(pid)
+        .bind(auth_user.user_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        if !is_owner {
+            return Err((StatusCode::FORBIDDEN, "You can only pin your own posts".to_string()));
+        }
+
+        sqlx::query("UPDATE users SET pinned_post_id = $1 WHERE id = $2")
+            .bind(pid)
+            .bind(auth_user.user_id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    } else {
+        // Unpin
+        sqlx::query("UPDATE users SET pinned_post_id = NULL WHERE id = $1")
+            .bind(auth_user.user_id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    Ok(Json(serde_json::json!({"status": "ok"})))
+}
+
+// ——— Reposts ———
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct RepostResponse {
+    pub post_id: uuid::Uuid,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn repost_post(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Path(post_id): Path<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    // Check if post exists
+    let exists: bool = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1)")
+        .bind(post_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if !exists {
+        return Err((StatusCode::NOT_FOUND, "Post not found".to_string()));
+    }
+
+    // Toggle repost (insert or delete)
+    let result = sqlx::query(
+        r#"
+        INSERT INTO reposts (user_id, post_id)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id, post_id)
+        DO DELETE
+        "#
+    )
+    .bind(auth_user.user_id)
+    .bind(post_id)
+    .execute(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let action = if result.rows_affected() == 1 { "reposted" } else { "unreposted" };
+    Ok(Json(serde_json::json!({"status": action})))
+}
+
+pub async fn get_user_reposts(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+) -> Result<Json<Vec<RepostResponse>>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let reposts = sqlx::query_as::<_, RepostResponse>(
+        r#"
+        SELECT post_id, created_at
+        FROM reposts
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 50
+        "#
+    )
+    .bind(auth_user.user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(reposts))
+}
+
+// ——— Signup Progress / Multi-step Wizard ———
+
+#[derive(Deserialize)]
+pub struct SignupStartRequest {
+    pub username: String,
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Deserialize)]
+pub struct SignupStepRequest {
+    pub temp_token: String,
+    pub step: i32,
+    pub data: HashMap<String, Value>,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct SignupProgressRow {
+    pub temp_token: uuid::Uuid,
+    pub data: serde_json::Value,
+    pub current_step: i32,
+}
+
+pub async fn signup_start(
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<SignupStartRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    // Check username/email uniqueness
+    let existing: bool = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 OR email = $2)"
+    )
+    .bind(&payload.username)
+    .bind(&payload.email)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if existing {
+        return Err((StatusCode::CONFLICT, "Username or email already taken".to_string()));
+    }
+
+    let hashed_pw = hash(&payload.password, DEFAULT_COST)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let data = serde_json::json!({
+        "username": payload.username,
+        "email": payload.email,
+        "password_hash": hashed_pw,
+    });
+
+    let row = sqlx::query_as::<_, SignupProgressRow>(
+        r#"
+        INSERT INTO signup_progress (data, current_step)
+        VALUES ($1, 1)
+        RETURNING temp_token, data, current_step
+        "#
+    )
+    .bind(&data)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "temp_token": row.temp_token.to_string(),
+        "current_step": row.current_step,
+    })))
+}
+
+pub async fn signup_step(
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<SignupStepRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let token = uuid::Uuid::parse_str(&payload.temp_token)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid token".to_string()))?;
+
+    // Get existing progress
+    let existing = sqlx::query_as::<_, SignupProgressRow>(
+        "SELECT temp_token, data, current_step FROM signup_progress WHERE temp_token = $1 AND expires_at > NOW()"
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::BAD_REQUEST, "Progress expired or not found".to_string()))?;
+
+    // Merge existing data with new data
+    let mut merged = existing.data;
+    if let Some(obj) = merged.as_object_mut() {
+        for (key, val) in payload.data {
+            obj.insert(key, val);
+        }
+    }
+
+    sqlx::query("UPDATE signup_progress SET data = $1, current_step = $2 WHERE temp_token = $3")
+        .bind(&merged)
+        .bind(payload.step)
+        .bind(token)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({"status": "saved", "current_step": payload.step})))
+}
+
+pub async fn signup_resume(
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+    State(state): State<crate::ServerState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let token_str = params.get("token").ok_or((StatusCode::BAD_REQUEST, "Missing token".to_string()))?;
+    let token = uuid::Uuid::parse_str(token_str)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid token".to_string()))?;
+
+    let row = sqlx::query_as::<_, SignupProgressRow>(
+        "SELECT temp_token, data, current_step FROM signup_progress WHERE temp_token = $1 AND expires_at > NOW()"
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "No saved progress".to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "temp_token": row.temp_token.to_string(),
+        "current_step": row.current_step,
+        "data": row.data,
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct SignupCompleteRequest {
+    pub temp_token: String,
+    pub display_name: String,
+    pub bio: Option<String>,
+    pub faction_name: Option<String>,
+}
+
+pub async fn signup_complete(
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<SignupCompleteRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let token = uuid::Uuid::parse_str(&payload.temp_token)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid token".to_string()))?;
+
+    let row = sqlx::query_as::<_, SignupProgressRow>(
+        "SELECT temp_token, data, current_step FROM signup_progress WHERE temp_token = $1 AND expires_at > NOW()"
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::BAD_REQUEST, "Progress expired".to_string()))?;
+
+    let username = row.data["username"].as_str().unwrap_or_default().to_string();
+    let email = row.data["email"].as_str().unwrap_or_default().to_string();
+    let password_hash = row.data["password_hash"].as_str().unwrap_or_default().to_string();
+
+    // Check uniqueness again in case of race
+    let existing: bool = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 OR email = $2)"
+    )
+    .bind(&username)
+    .bind(&email)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if existing {
+        return Err((StatusCode::CONFLICT, "Username or email already taken".to_string()));
+    }
+
+    // Handle faction if provided
+    let faction_id: Option<uuid::Uuid> = if let Some(ref faction_name) = payload.faction_name {
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM factions WHERE name = $1")
+            .bind(faction_name)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    } else {
+        None
+    };
+
+    let user_id = sqlx::query_scalar::<_, uuid::Uuid>(
+        "INSERT INTO users (display_name, username, email, password_hash, faction_id, bio) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
+    )
+    .bind(&payload.display_name)
+    .bind(&username)
+    .bind(&email)
+    .bind(&password_hash)
+    .bind(faction_id)
+    .bind(&payload.bio.unwrap_or_default())
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    // Clean up progress
+    let _ = sqlx::query("DELETE FROM signup_progress WHERE temp_token = $1")
+        .bind(token)
+        .execute(pool)
+        .await;
+
+    let token = create_jwt(user_id).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // Send welcome message
+    crate::comms::send_welcome_message(
+        pool,
+        user_id,
+        &payload.display_name,
+        state.ws_state.as_ref(),
+    ).await;
+
+    Ok(Json(serde_json::json!({
+        "user_id": user_id,
+        "username": username,
+        "token": token,
+    })))
 }

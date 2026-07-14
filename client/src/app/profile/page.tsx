@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
-import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award, MessageSquare, Radio, TrendingUp } from 'lucide-react';
+import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award, MessageSquare, Radio, TrendingUp, BookOpen, Pin } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
 import { TitleSection } from '@/components/TitleBadge';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
@@ -31,16 +31,23 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState('');
 
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [bioText, setBioText] = useState('');
+
   const handleUpdate = async () => {
     try {
+      const body: any = {};
+      if (displayName) body.display_name = displayName;
+      if (bioText !== undefined) body.bio = bioText;
       const res = await apiFetch('/api/auth/me', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: displayName })
+        body: JSON.stringify(body)
       });
       if (!res.ok) throw new Error('Update failed');
       toast.success('Profile updated');
       setIsEditing(false);
+      setIsEditingBio(false);
       refetch();
     } catch {
       toast.error('Update failed');
@@ -96,7 +103,34 @@ export default function ProfilePage() {
                     </button>
                   </div>
                 )}
-                <p className="text-zinc-500 font-mono text-sm mb-4">@{user.username}</p>
+                <p className="text-zinc-500 font-mono text-sm mb-2">@{user.username}</p>
+                
+                {/* Bio */}
+                {isEditingBio ? (
+                  <div className="mb-3 flex items-start gap-2">
+                    <textarea 
+                      value={bioText}
+                      onChange={e => setBioText(e.target.value)}
+                      className="flex-1 bg-black border border-green-500/50 rounded px-3 py-2 text-xs text-zinc-300 outline-none resize-none"
+                      rows={2}
+                      placeholder="Write something about yourself..."
+                    />
+                    <button onClick={handleUpdate} className="text-green-500 hover:text-green-400 p-1 mt-1"><Check size={18}/></button>
+                    <button onClick={() => setIsEditingBio(false)} className="text-red-500 hover:text-red-400 p-1 mt-1"><X size={18}/></button>
+                  </div>
+                ) : user.bio ? (
+                  <div className="mb-3 flex items-start gap-2">
+                    <BookOpen size={14} className="text-zinc-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-zinc-400 leading-relaxed text-left">{user.bio}</p>
+                    <button onClick={() => { setBioText(user.bio); setIsEditingBio(true); }} className="text-zinc-600 hover:text-green-400 shrink-0 mt-0.5">
+                      <Edit2 size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setBioText(''); setIsEditingBio(true); }} className="mb-3 text-[10px] text-zinc-600 hover:text-green-400 italic flex items-center gap-1">
+                    <BookOpen size={12} /> Add bio
+                  </button>
+                )}
                 
                 <div className="flex flex-wrap justify-center md:justify-start gap-3">
                   <div className="flex items-center gap-2 px-3 py-1 bg-black border border-zinc-800 rounded-full text-xs text-zinc-400">
@@ -141,6 +175,18 @@ export default function ProfilePage() {
             </h3>
             <TitleSection />
           </div>
+
+          {/* Pinned Post */}
+          {user.pinned_post_id && user.pinned_post_content && (
+            <div className="border border-yellow-500/30 bg-yellow-500/5 p-6 rounded-xl">
+              <h3 className="text-xs font-bold text-yellow-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Pin size={14} /> Pinned Broadcast
+              </h3>
+              <div className="bg-black/40 border border-yellow-500/20 rounded-lg p-4">
+                <p className="text-sm text-zinc-300 font-mono">{user.pinned_post_content}</p>
+              </div>
+            </div>
+          )}
 
           {/* Broadcasts Section */}
           <ProfileBroadcastsSection />

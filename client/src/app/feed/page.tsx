@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp } from 'lucide-react';
+import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
@@ -200,8 +200,10 @@ export default function Dashboard() {
 
 function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boolean, isAnonymousUser?: boolean }) {
   const queryClient = useQueryClient();
+  const { user } = useUser();
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const isPinned = user?.pinned_post_id === post.id;
 
   const displayAuthor = post.is_anonymous ? 'Anonymous' : `@${post.author_name}`;
   const displayFaction = post.is_anonymous ? 'Classified' : (post.faction_name || 'Unaffiliated');
@@ -231,6 +233,34 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
     onSuccess: () => {
       toast.success("Broadcast boosted (+1 INF)");
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    }
+  });
+
+  const repostMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/posts/${post.id}/repost`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to repost');
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast.success(data.status === 'reposted' ? 'Broadcast retransmitted' : 'Repost removed');
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    }
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/posts/${post.id}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: isPinned ? null : post.id })
+      });
+      if (!res.ok) throw new Error('Failed to toggle pin');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success(isPinned ? 'Broadcast unpinned' : 'Broadcast pinned to profile');
       queryClient.invalidateQueries({ queryKey: ['me'] });
     }
   });
@@ -317,6 +347,24 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
             <MessageSquare size={14} />
             <span>{post.reply_count} Replies</span>
           </button>
+          <button 
+            onClick={() => !isAnonymousUser && repostMutation.mutate()}
+            disabled={repostMutation.isPending}
+            className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-green-400 transition-colors disabled:opacity-50"
+          >
+            <Repeat2 size={14} />
+            <span>Repost</span>
+          </button>
+          {isMine && (
+            <button 
+              onClick={() => pinMutation.mutate()}
+              disabled={pinMutation.isPending}
+              className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${isPinned ? 'text-yellow-500' : 'text-zinc-500 hover:text-yellow-400'}`}
+            >
+              <Pin size={14} className={isPinned ? 'fill-yellow-500' : ''} />
+              <span>{isPinned ? 'Pinned' : 'Pin'}</span>
+            </button>
+          )}
         </div>
         <span className="text-[10px] font-bold text-green-500 glow-text uppercase tracking-widest">+{post.influence_earned} INF</span>
       </div>

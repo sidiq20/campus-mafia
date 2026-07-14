@@ -18,6 +18,7 @@ export type UserProfile = {
   display_name: string;
   username: string;
   email: string;
+  bio: string;
   faction_id: string | null;
   faction_name: string | null;
   influence: number;
@@ -25,6 +26,8 @@ export type UserProfile = {
   heat_level: number;
   rank: RankInfo;
   faction_role: string;
+  pinned_post_id: string | null;
+  pinned_post_content: string | null;
   created_at: string;
 };
 

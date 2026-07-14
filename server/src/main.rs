@@ -293,6 +293,17 @@ async fn main() {
         // Social
         .route("/api/leaderboard", get(social::get_leaderboard))
         
+        // Pin / Repost
+        .route("/api/posts/:id/pin", axum::routing::post(auth::pin_post))
+        .route("/api/posts/:id/repost", axum::routing::post(auth::repost_post))
+        .route("/api/reposts", get(auth::get_user_reposts))
+        
+        // Signup Wizard
+        .route("/api/auth/signup/start", axum::routing::post(auth::signup_start))
+        .route("/api/auth/signup/step", axum::routing::post(auth::signup_step))
+        .route("/api/auth/signup/resume", get(auth::signup_resume))
+        .route("/api/auth/signup/complete", axum::routing::post(auth::signup_complete))
+        
         // Notifications
         .route("/api/notifications", axum::routing::get(notifications::get_notifications).post(notifications::mark_notifications_read))
 

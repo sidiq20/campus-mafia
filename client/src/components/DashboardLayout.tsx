@@ -8,6 +8,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Toaster, toast } from 'sonner';
 import PwaInstallBanner from './PwaInstallBanner';
+import PetCat from './PetCat';
 import { WS_URL, clearToken, apiFetch } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -181,6 +182,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <PwaInstallBanner />
+      <PetCat recentActivity={(() => {
+        const latest = messages[messages.length - 1];
+        if (!latest) return [];
+        const text = latest.msg || latest.content || `${latest.type}${latest.author ? ' by @'+latest.author : latest.territory_name ? ' on '+latest.territory_name : ''}`;
+        return text ? [text] : [];
+      })()} />
     </div>
   );
 }

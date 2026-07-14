@@ -183,6 +183,56 @@ pub async fn send_welcome_message(
     }
 }
 
+/// Insert a welcome message into a faction's chat channel when a new member joins.
+pub async fn send_faction_welcome_message(
+    pool: &PgPool,
+    new_user_id: uuid::Uuid,
+    faction_id: uuid::Uuid,
+    display_name: &str,
+    ws_state: &crate::ws::AppState,
+) -> Result<(), sqlx::Error> {
+    let content = format!("🤝 {} has joined the faction! Welcome aboard, operative.", display_name);
+
+    let msg = sqlx::query_as::<_, ChatMessageResponse>(
+        r#"
+        WITH inserted AS (
+            INSERT INTO chat_messages (user_id, channel_type, channel_id, content)
+            VALUES ($1, 'faction', $2, $3)
+            RETURNING id, channel_type, channel_id, content, user_id, created_at
+        )
+        SELECT 
+            i.id, 
+            i.channel_type, 
+            i.channel_id, 
+            i.content, 
+            u.username as author_name, 
+            f.name as faction_name,
+            i.created_at
+        FROM inserted i
+        JOIN users u ON i.user_id = u.id
+        LEFT JOIN factions f ON u.faction_id = f.id
+        "#
+    )
+    .bind(new_user_id)
+    .bind(faction_id)
+    .bind(&content)
+    .fetch_one(pool)
+    .await?;
+
+    let event = crate::ws::GameEvent::ChatMessage {
+        author: msg.author_name.clone(),
+        faction: msg.faction_name.clone(),
+        msg: msg.content.clone(),
+        channel_type: "faction".to_string(),
+        channel_id: Some(faction_id.to_string()),
+    };
+    if let Ok(event_json) = serde_json::to_string(&event) {
+        let _ = ws_state.tx.send(event_json);
+    }
+
+    Ok(())
+}
+
 pub async fn get_faction_chat(
     auth_user: AuthUser,
     State(state): State<ServerState>,

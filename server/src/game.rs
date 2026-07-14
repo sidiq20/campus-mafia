@@ -329,6 +329,25 @@ pub async fn join_faction(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Get user display name for welcome message
+    let display_name: Option<String> = sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or_default()
+        .flatten();
+
+    // Send faction welcome message
+    if let Some(ref name) = display_name {
+        let _ = crate::comms::send_faction_welcome_message(
+            pool,
+            user_id,
+            faction_id,
+            name,
+            state.ws_state.as_ref(),
+        ).await;
+    }
+
     // Check faction join titles
     let _ = crate::titles::check_faction_join_titles(pool, user_id).await;
 

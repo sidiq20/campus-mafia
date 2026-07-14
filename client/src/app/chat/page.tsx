@@ -19,6 +19,7 @@ type ChatListItem = {
   display_name: string;
   last_message: string;
   created_at: string;
+  unread_count: number;
 };
 
 export default function ChatsIndexPage() {
@@ -108,12 +109,19 @@ export default function ChatsIndexPage() {
                   className="block p-4 bg-black/60 border border-zinc-800 rounded-lg hover:border-green-500/30 transition-colors"
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="font-bold text-zinc-200">{chat.display_name}</span>
-                    <span className="text-[9px] text-zinc-600 font-mono">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-bold text-zinc-200 truncate">{chat.display_name}</span>
+                      {chat.unread_count > 0 && (
+                        <span className="bg-green-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,255,65,0.4)]">
+                          {chat.unread_count}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[9px] text-zinc-600 font-mono shrink-0">
                       {new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-xs text-zinc-400 truncate">{chat.last_message}</p>
+                  <p className={`text-xs truncate ${chat.unread_count > 0 ? 'text-zinc-300 font-bold' : 'text-zinc-400'}`}>{chat.last_message}</p>
                 </Link>
               ))}
               {(!chats || chats.length === 0) && <p className="text-center text-zinc-700 py-8 italic">No recent chats.</p>}

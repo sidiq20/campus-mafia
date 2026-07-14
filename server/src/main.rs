@@ -372,6 +372,8 @@ async fn main() {
         .route("/api/chat/direct/unread/count", axum::routing::get(dm::get_unread_dm_count))
         .route("/api/chat/direct/:username/read", axum::routing::post(dm::mark_dms_read))
         .route("/api/chat/direct/:username", axum::routing::get(dm::get_dm_history))
+        .route("/api/chat/direct/:username/react", axum::routing::post(dm::add_dm_reaction))
+        .route("/api/chat/direct/:username/reactions", axum::routing::get(dm::get_dm_reactions))
 
         // Posts
         .route("/api/posts", axum::routing::post(create_post).get(get_posts))

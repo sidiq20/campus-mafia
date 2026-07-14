@@ -56,6 +56,10 @@ pub enum GameEvent {
         reply_to_content: Option<String>,
         created_at: String,
     },
+    /// Real-time DM reaction update.
+    DmReaction {
+        message_id: String,
+    },
 }
 
 pub async fn ws_handler(

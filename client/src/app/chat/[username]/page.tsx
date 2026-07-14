@@ -8,7 +8,7 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { apiFetch, WS_URL } from '@/lib/api';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
-import { Send, ArrowLeft, Reply, X } from 'lucide-react';
+import { Send, ArrowLeft, Reply, X, Check, CheckCheck, SmilePlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Message = {
@@ -22,7 +22,14 @@ type Message = {
   created_at: string;
 };
 
+type DmReaction = {
+  message_id: string;
+  user_id: string;
+  reaction: string;
+};
+
 const TYPING_DEBOUNCE_MS = 1500;
+const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
 export default function DirectChatPage() {
   const { username } = useParams() as { username: string };
@@ -31,6 +38,7 @@ export default function DirectChatPage() {
   const [content, setContent] = useState('');
   const [otherTyping, setOtherTyping] = useState(false);
   const [replyTo, setReplyTo] = useState<{ id: string; content: string } | null>(null);
+  const [sendingLock, setSendingLock] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingWsRef = useRef<WebSocket | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,6 +55,27 @@ export default function DirectChatPage() {
     staleTime: 10_000,
   });
 
+  const { data: reactions } = useQuery<DmReaction[]>({
+    queryKey: ['dm-reactions', username],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/chat/direct/${username}/reactions`);
+      return res.ok ? res.json() : [];
+    },
+    staleTime: 5_000,
+    enabled: !!user,
+  });
+
+  // Group reactions by message_id
+  const reactionsByMsg = useCallback(() => {
+    const map = new Map<string, DmReaction[]>();
+    reactions?.forEach(r => {
+      const existing = map.get(r.message_id) || [];
+      existing.push(r);
+      map.set(r.message_id, existing);
+    });
+    return map;
+  }, [reactions]);
+
   // Mark messages as read when opening this chat
   useEffect(() => {
     if (!user) return;
@@ -54,10 +83,11 @@ export default function DirectChatPage() {
       .then(res => {
         if (res.ok) {
           queryClient.invalidateQueries({ queryKey: ['dm-unread'] });
+          queryClient.invalidateQueries({ queryKey: ['chats'] });
         }
       })
       .catch(() => {});
-  }, [username, user]);
+  }, [username, user, queryClient]);
 
   const mutation = useMutation({
     mutationFn: async (msg: { receiver_username: string, content: string; reply_to_id?: string | null }) => {
@@ -72,15 +102,33 @@ export default function DirectChatPage() {
       }
       return res.json();
     },
+    onMutate: () => setSendingLock(true),
     onSuccess: () => {
       setContent('');
       setReplyTo(null);
+      setSendingLock(false);
       queryClient.invalidateQueries({ queryKey: ['chat', username] });
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Transmission failed')
+    onError: (err) => {
+      setSendingLock(false);
+      toast.error(err instanceof Error ? err.message : 'Transmission failed');
+    }
   });
 
-  // ——— WebSocket for typing indicators + real-time messages ———
+  const reactMutation = useMutation({
+    mutationFn: async ({ message_id, reaction }: { message_id: string; reaction: string }) => {
+      const res = await apiFetch(`/api/chat/direct/${username}/react`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_id, reaction })
+      });
+      if (!res.ok) throw new Error('Failed to react');
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['dm-reactions', username] }),
+  });
+
+  // ——— WebSocket ———
   useEffect(() => {
     if (!user) return;
     const ws = new WebSocket(`${WS_URL}/api/ws`);
@@ -90,18 +138,15 @@ export default function DirectChatPage() {
       try {
         const data = JSON.parse(event.data);
 
-        // Typing indicator
         if (data.type === 'TypingIndicator'
             && data.from_username === username
             && data.target_username === user.username) {
           setOtherTyping(data.is_typing);
         }
 
-        // Real-time new DM — appear instantly in the cache
         if (data.type === 'NewDirectMessage'
             && data.sender_username === username
             && data.receiver_username === user.username) {
-          // Add to cache without refetch
           queryClient.setQueryData<Message[]>(['chat', username], (old) => {
             if (!old) return old;
             const newMsg: Message = {
@@ -116,6 +161,13 @@ export default function DirectChatPage() {
             };
             return [...old, newMsg];
           });
+          queryClient.invalidateQueries({ queryKey: ['dm-unread'] });
+          queryClient.invalidateQueries({ queryKey: ['chats'] });
+        }
+
+        // Real-time reaction update
+        if (data.type === 'DmReaction' && (data.target_username === user.username || data.sender_username === username)) {
+          queryClient.invalidateQueries({ queryKey: ['dm-reactions', username] });
         }
       } catch (_) {}
     };
@@ -137,9 +189,7 @@ export default function DirectChatPage() {
     };
   }, [user, username, queryClient]);
 
-  useEffect(() => {
-    setOtherTyping(false);
-  }, [messages]);
+  useEffect(() => { setOtherTyping(false); }, [messages]);
 
   const sendTypingIndicator = useCallback((typing: boolean) => {
     const ws = typingWsRef.current;
@@ -163,20 +213,22 @@ export default function DirectChatPage() {
   };
 
   const handleSend = () => {
+    if (sendingLock || !content.trim() || mutation.isPending) return;
     sendTypingIndicator(false);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    if (content.trim()) {
-      mutation.mutate({
-        receiver_username: username,
-        content: content.trim(),
-        reply_to_id: replyTo?.id || null,
-      });
-    }
+    mutation.mutate({
+      receiver_username: username,
+      content: content.trim(),
+      reply_to_id: replyTo?.id || null,
+    });
   };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  const isSending = sendingLock || mutation.isPending;
+  const msgReactions = reactionsByMsg();
 
   return (
     <DashboardLayout>
@@ -204,41 +256,89 @@ export default function DirectChatPage() {
               <div className="text-center text-green-500 text-sm animate-pulse font-mono">// Decrypting history...</div>
             ) : messages?.length === 0 ? (
               <div className="text-center text-zinc-600 text-xs py-12 font-mono italic">No messages yet. Send the first transmission.</div>
-            ) : messages?.map(msg => (
-              <div key={msg.id} className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'} group`}>
-                <div className={`max-w-[75%] sm:max-w-[60%] ${msg.sender_id === user?.id ? 'order-1' : 'order-1'}`}>
-                  {/* Reply context bubble */}
-                  {msg.reply_to_content && (
-                    <div className={`mb-1 px-3 py-1.5 rounded text-[10px] border-l-2 ${msg.sender_id === user?.id ? 'bg-green-500/5 border-green-400/40 text-green-300/70' : 'bg-zinc-800/50 border-zinc-600 text-zinc-400'}`}>
-                      <span className="font-bold text-[8px] uppercase tracking-widest block mb-0.5">
-                        {msg.sender_id === user?.id ? 'You replied to' : `${username} replied to`}
-                      </span>
-                      {msg.reply_to_content}
-                    </div>
-                  )}
-                  {/* Message bubble */}
-                  <div className={`p-3 sm:p-4 rounded-lg border ${msg.sender_id === user?.id ? 'bg-green-500/10 border-green-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800 rounded-tl-sm'}`}>
-                    <p className="text-sm text-zinc-100 font-mono">{msg.content}</p>
-                    <div className="flex items-center justify-between gap-2 mt-1.5">
-                      <span className="text-[9px] text-zinc-500">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      {/* Reply button */}
-                      {user && (
-                        <button
-                          onClick={() => {
-                            setReplyTo({ id: msg.id, content: msg.content.slice(0, 80) + (msg.content.length > 80 ? '...' : '') });
-                            inputRef.current?.focus();
-                          }}
-                          className="text-[9px] text-zinc-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Reply"
-                        >
-                          <Reply size={12} />
-                        </button>
+            ) : messages?.map(msg => {
+              const myMsg = msg.sender_id === user?.id;
+              const msgRxs = msgReactions.get(msg.id) || [];
+              return (
+                <div key={msg.id} className={`flex ${myMsg ? 'justify-end' : 'justify-start'} group`}>
+                  <div className="max-w-[75%] sm:max-w-[60%]">
+                    {msg.reply_to_content && (
+                      <div className={`mb-1 px-3 py-1.5 rounded text-[10px] border-l-2 ${myMsg ? 'bg-green-500/5 border-green-400/40 text-green-300/70' : 'bg-zinc-800/50 border-zinc-600 text-zinc-400'}`}>
+                        <span className="font-bold text-[8px] uppercase tracking-widest block mb-0.5">
+                          {myMsg ? 'You replied to' : `${username} replied to`}
+                        </span>
+                        {msg.reply_to_content}
+                      </div>
+                    )}
+                    <div className={`p-3 sm:p-4 rounded-lg border ${myMsg ? 'bg-green-500/10 border-green-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800 rounded-tl-sm'}`}>
+                      <p className="text-sm text-zinc-100 font-mono">{msg.content}</p>
+                      <div className="flex items-center justify-between gap-2 mt-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] text-zinc-500">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {/* Read receipt – only shown on own messages */}
+                          {myMsg && (
+                            <span title={msg.is_read ? 'Read' : 'Sent'}>
+                              {msg.is_read
+                                ? <CheckCheck size={12} className="text-green-400" />
+                                : <Check size={12} className="text-zinc-500" />}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {/* Reaction picker */}
+                          {user && (
+                            <div className="relative group/reaction">
+                              <button className="text-[9px] text-zinc-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <SmilePlus size={12} />
+                              </button>
+                              <div className="absolute bottom-full right-0 mb-1 hidden group-hover/reaction:flex gap-0.5 bg-black border border-zinc-800 rounded-lg p-1 shadow-xl z-10">
+                                {REACTIONS.map(r => (
+                                  <button
+                                    key={r}
+                                    onClick={() => reactMutation.mutate({ message_id: msg.id, reaction: r })}
+                                    className="text-sm hover:scale-125 transition-transform px-0.5"
+                                  >
+                                    {r}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Reply button */}
+                          {user && (
+                            <button
+                              onClick={() => {
+                                setReplyTo({ id: msg.id, content: msg.content.slice(0, 80) + (msg.content.length > 80 ? '...' : '') });
+                                inputRef.current?.focus();
+                              }}
+                              className="text-[9px] text-zinc-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Reply"
+                            >
+                              <Reply size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Reactions display */}
+                      {msgRxs.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {Object.entries(
+                            msgRxs.reduce((acc: Record<string, number>, r) => {
+                              acc[r.reaction] = (acc[r.reaction] || 0) + 1;
+                              return acc;
+                            }, {})
+                          ).map(([emoji, count]) => (
+                            <span key={emoji} className="text-[10px] bg-black/40 border border-zinc-800 rounded px-1.5 py-0.5">
+                              {emoji} {count > 1 && <span className="text-zinc-500">{count}</span>}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </PullToRefresh>
 
@@ -265,15 +365,15 @@ export default function DirectChatPage() {
               className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-4 py-3 text-sm outline-none focus:border-green-500/50 text-zinc-200"
               placeholder="Secure transmission..."
               onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey && content.trim()) handleSend();
+                if (e.key === 'Enter' && !e.shiftKey && content.trim() && !isSending) handleSend();
               }}
             />
             <button
               onClick={handleSend}
-              disabled={!content.trim()}
-              className="px-5 bg-green-500/10 text-green-400 border border-green-500/40 rounded hover:bg-green-500/20 transition-all disabled:opacity-50"
+              disabled={!content.trim() || isSending}
+              className={`px-5 border rounded transition-all disabled:opacity-50 ${isSending ? 'bg-zinc-800 text-zinc-500 border-zinc-700' : 'bg-green-500/10 text-green-400 border-green-500/40 hover:bg-green-500/20'}`}
             >
-              <Send size={18} />
+              {isSending ? <span className="text-xs animate-pulse">...</span> : <Send size={18} />}
             </button>
           </div>
         </div>

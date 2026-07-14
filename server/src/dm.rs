@@ -173,6 +173,7 @@ pub struct ChatListItem {
     pub display_name: String,
     pub last_message: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub unread_count: Option<i64>,
 }
 
 pub async fn get_unread_dm_count(
@@ -226,13 +227,23 @@ pub async fn get_chat_list(
 ) -> Result<Json<Vec<ChatListItem>>, (StatusCode, String)> {
     let pool = &state.pool;
 
-    let rows = sqlx::query_as::<_, ChatListItem>(
+    #[derive(sqlx::FromRow)]
+    struct ChatListRow {
+        pub username: String,
+        pub display_name: String,
+        pub last_message: String,
+        pub created_at: chrono::DateTime<chrono::Utc>,
+        pub unread_count: Option<i64>,
+    }
+
+    let rows = sqlx::query_as::<_, ChatListRow>(
         r#"
         SELECT DISTINCT ON (u.username)
             u.username,
             u.display_name,
             dm.content as last_message,
-            dm.created_at
+            dm.created_at,
+            (SELECT COUNT(*) FROM direct_messages sub WHERE sub.sender_id = u.id AND sub.receiver_id = $1 AND sub.is_read = false) as unread_count
         FROM direct_messages dm
         JOIN users u ON (u.id = dm.sender_id OR u.id = dm.receiver_id)
         WHERE (dm.sender_id = $1 OR dm.receiver_id = $1)
@@ -245,9 +256,112 @@ pub async fn get_chat_list(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    let items: Vec<ChatListItem> = rows.into_iter().map(|r| ChatListItem {
+        username: r.username,
+        display_name: r.display_name,
+        last_message: r.last_message,
+        created_at: r.created_at,
+        unread_count: r.unread_count,
+    }).collect();
+
     // Sort by most recent message first
-    let mut sorted = rows;
+    let mut sorted = items;
     sorted.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     Ok(Json(sorted))
+}
+
+// ——— DM Reactions ———
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct DmReactionRow {
+    pub message_id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+    pub reaction: String,
+}
+
+#[derive(Deserialize)]
+pub struct AddDmReactionRequest {
+    pub message_id: uuid::Uuid,
+    pub reaction: String,
+}
+
+pub async fn add_dm_reaction(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(_other_username): Path<String>,
+    Json(payload): Json<AddDmReactionRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    // Toggle reaction: insert if not exists, delete if same reaction
+    let existing: Option<String> = sqlx::query_scalar(
+        "SELECT reaction FROM dm_reactions WHERE message_id = $1 AND user_id = $2"
+    )
+    .bind(payload.message_id)
+    .bind(auth_user.user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    match existing {
+        Some(ref r) if r == &payload.reaction => {
+            // Remove reaction
+            sqlx::query("DELETE FROM dm_reactions WHERE message_id = $1 AND user_id = $2")
+                .bind(payload.message_id)
+                .bind(auth_user.user_id)
+                .execute(pool)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        }
+        _ => {
+            // Upsert reaction
+            sqlx::query(
+                r#"
+                INSERT INTO dm_reactions (message_id, user_id, reaction)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (message_id, user_id)
+                DO UPDATE SET reaction = EXCLUDED.reaction
+                "#
+            )
+            .bind(payload.message_id)
+            .bind(auth_user.user_id)
+            .bind(&payload.reaction)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        }
+    }
+
+    // Broadcast reaction event via WS
+    let event = crate::ws::GameEvent::DmReaction {
+        message_id: payload.message_id.to_string(),
+    };
+    if let Ok(event_json) = serde_json::to_string(&event) {
+        let _ = state.ws_state.tx.send(event_json);
+    }
+
+    Ok(Json(serde_json::json!({"status": "ok"})))
+}
+
+pub async fn get_dm_reactions(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(_other_username): Path<String>,
+) -> Result<Json<Vec<DmReactionRow>>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let reactions = sqlx::query_as::<_, DmReactionRow>(
+        r#"
+        SELECT dr.message_id, dr.user_id, dr.reaction
+        FROM dm_reactions dr
+        JOIN direct_messages dm ON dr.message_id = dm.id
+        WHERE (dm.sender_id = $1 OR dm.receiver_id = $1)
+        "#
+    )
+    .bind(auth_user.user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(reactions))
 }

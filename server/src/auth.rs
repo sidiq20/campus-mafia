@@ -294,30 +294,6 @@ pub async fn get_user_by_username(
     Ok(Json(profile))
 }
 
-#[derive(Deserialize)]
-pub struct UpdateProfileRequest {
-    pub display_name: Option<String>,
-}
-
-pub async fn update_profile(
-    auth_user: AuthUser,
-    State(state): State<crate::ServerState>,
-    Json(payload): Json<UpdateProfileRequest>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let pool = &state.pool;
-
-    if let Some(display_name) = payload.display_name {
-        sqlx::query("UPDATE users SET display_name = $1 WHERE id = $2")
-            .bind(display_name)
-            .bind(auth_user.user_id)
-            .execute(pool)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    }
-
-    Ok(Json(serde_json::json!({"status": "success"})))
-}
-
 pub async fn me(
     auth_user: AuthUser,
     State(state): State<crate::ServerState>,
@@ -376,28 +352,4 @@ pub async fn me(
     };
 
     Ok(Json(profile))
-}
-
-#[derive(Deserialize)]
-pub struct UpdateProfileRequest {
-    pub display_name: Option<String>,
-}
-
-pub async fn update_profile(
-    auth_user: AuthUser,
-    State(state): State<crate::ServerState>,
-    Json(payload): Json<UpdateProfileRequest>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let pool = &state.pool;
-
-    if let Some(display_name) = payload.display_name {
-        sqlx::query("UPDATE users SET display_name = $1 WHERE id = $2")
-            .bind(display_name)
-            .bind(auth_user.user_id)
-            .execute(pool)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    }
-
-    Ok(Json(serde_json::json!({"status": "success"})))
 }

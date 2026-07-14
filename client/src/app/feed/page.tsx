@@ -327,7 +327,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       </div>
       <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono">{post.content}</p>
       <div className="flex justify-between items-center pt-4 border-t border-zinc-800/50">
-        <div className="flex gap-6">
+        <div className="flex gap-4 sm:gap-6">
           <button 
             onClick={() => {
               if (isAnonymousUser) {
@@ -337,38 +337,41 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
               boostMutation.mutate();
             }} 
             disabled={boostMutation.isPending || post.has_boosted}
-            className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+            className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+            title={post.has_boosted ? 'Boosted' : 'Boost'}
           >
             <Zap size={14} className={post.has_boosted ? "fill-green-500" : ""} />
-            <span>{post.has_boosted ? 'Boosted' : 'Boost'}</span>
+            <span className="hidden sm:inline">{post.has_boosted ? 'Boosted' : 'Boost'}</span>
           </button>
           <button 
             onClick={() => setShowComments(!showComments)}
-            className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-blue-400 transition-colors"
+            className="flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-blue-400 transition-colors"
+            title={`${post.reply_count} Replies`}
           >
             <MessageSquare size={14} />
-            <span>{post.reply_count} Replies</span>
+            <span className="hidden sm:inline">{post.reply_count} Replies</span>
           </button>
           <button 
             onClick={() => !isAnonymousUser && repostMutation.mutate()}
             disabled={repostMutation.isPending}
-            className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${post.has_reposted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+            className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${post.has_reposted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
+            title={post.has_reposted ? 'Reposted' : 'Repost'}
           >
             <Repeat2 size={14} className={post.has_reposted ? 'text-green-500' : ''} />
-            <span>{post.has_reposted ? 'Reposted' : 'Repost'}</span>
+            <span className="hidden sm:inline">{post.has_reposted ? 'Reposted' : 'Repost'}</span>
           </button>
           {isMine && (
             <button 
               onClick={() => pinMutation.mutate()}
               disabled={pinMutation.isPending}
-              className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${isPinned ? 'text-yellow-500' : 'text-zinc-500 hover:text-yellow-400'}`}
+              className={`flex items-center gap-1 sm:gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${isPinned ? 'text-yellow-500' : 'text-zinc-500 hover:text-yellow-400'}`}
+              title={isPinned ? 'Pinned' : 'Pin'}
             >
               <Pin size={14} className={isPinned ? 'fill-yellow-500' : ''} />
-              <span>{isPinned ? 'Pinned' : 'Pin'}</span>
+              <span className="hidden sm:inline">{isPinned ? 'Pinned' : 'Pin'}</span>
             </button>
           )}
         </div>
-        <span className="text-[10px] font-bold text-green-500 glow-text uppercase tracking-widest">+{post.influence_earned} INF</span>
       </div>
 
       {showComments && (

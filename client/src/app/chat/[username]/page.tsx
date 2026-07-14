@@ -5,8 +5,9 @@ import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { apiFetch, WS_URL } from '@/lib/api';
+import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
-import { Send, Terminal } from 'lucide-react';
+import { Send, Terminal, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Message = {
@@ -153,9 +154,12 @@ export default function DirectChatPage() {
 
   return (
     <DashboardLayout>
-      <header className="h-16 border-b border-green-500/30 flex items-center px-8 bg-black/60 backdrop-blur-md">
-        <div className="flex-1">
-          <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text">Direct Channel // @{username}</h2>
+      <header className="h-16 border-b border-green-500/30 flex items-center gap-4 px-4 sm:px-8 bg-black/60 backdrop-blur-md">
+        <Link href="/chat" className="text-zinc-500 hover:text-green-400 transition-colors shrink-0">
+          <ArrowLeft size={20} />
+        </Link>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text truncate">Direct Channel // @{username}</h2>
           {otherTyping && (
             <p className="text-[10px] text-green-400/70 mt-0.5 animate-pulse flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -200,10 +204,10 @@ export default function DirectChatPage() {
               onClick={() => {
                 sendTypingIndicator(false);
                 if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-                mutation.mutate({ receiver_username: username, content });
+                if (content.trim()) mutation.mutate({ receiver_username: username, content: content.trim() });
               }}
-              disabled={!content.trim() || mutation.isPending}
-              className="px-6 bg-green-500/10 text-green-400 border border-green-500/40 rounded hover:bg-green-500/20 transition-all"
+              disabled={!content.trim()}
+              className="px-6 bg-green-500/10 text-green-400 border border-green-500/40 rounded hover:bg-green-500/20 transition-all disabled:opacity-50"
             >
               <Send size={18} />
             </button>

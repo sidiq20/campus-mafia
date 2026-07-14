@@ -403,17 +403,24 @@ export default function FactionHubPage({ params }: { params: Promise<{ id: strin
                                 <span className="text-zinc-500 font-bold text-xs">{member.username.substring(0, 2).toUpperCase()}</span>
                               )}
                             </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <div className="text-sm font-bold text-zinc-200 truncate">@{member.username}</div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="text-sm font-bold text-zinc-200 truncate max-w-[120px] sm:max-w-none">@{member.username}</div>
                                 <ExecutiveBadgeSmall role={member.faction_role} />
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5">
+                              <div className="flex items-center gap-2 mt-1 sm:mt-0.5 flex-wrap">
                                 <RankBadgeSmall rank={member.rank} />
+                                <div className="flex items-center gap-1.5 sm:hidden">
+                                  <div className="h-1.5 w-16 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 rounded-full" 
+                                      style={{ width: `${Math.min(100, (member.influence / 500) * 100)}%` }} />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-yellow-500 tabular-nums">{member.influence}</span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3 shrink-0 ml-3">
+                          <div className="hidden sm:flex items-center gap-3 shrink-0 ml-3">
                             <div className="flex items-center gap-1.5">
                               <div className="h-2 w-14 bg-zinc-800 rounded-full overflow-hidden">
                                 <div 

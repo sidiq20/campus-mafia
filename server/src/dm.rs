@@ -204,5 +204,9 @@ pub async fn get_chat_list(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok(Json(rows))
+    // Sort by most recent message first
+    let mut sorted = rows;
+    sorted.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    Ok(Json(sorted))
 }

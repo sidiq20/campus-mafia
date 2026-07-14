@@ -110,14 +110,25 @@ pub async fn send_global_chat(
     // Process Tags
     let tags = extract_tags(&payload.content);
     for tag in tags {
-        let _ = sqlx::query(
-            "INSERT INTO notifications (user_id, content) 
-             SELECT id, $1 FROM users WHERE username = $2"
+        // Get the user ID of the tagged user
+        if let Ok(Some(tagged_id)) = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM users WHERE username = $1"
         )
-        .bind(format!("You were mentioned in global comms by @{}", msg.author_name))
         .bind(&tag)
-        .execute(pool)
-        .await;
+        .fetch_optional(pool)
+        .await
+        {
+            let _ = sqlx::query(
+                "INSERT INTO notifications (user_id, content) VALUES ($1, $2)"
+            )
+            .bind(tagged_id)
+            .bind(format!("You were mentioned in global comms by @{}", msg.author_name))
+            .execute(pool)
+            .await;
+
+            // Send push notification to the tagged user
+            let _ = crate::push::notify_user(pool, tagged_id).await;
+        }
     }
 
     // Broadcast to WS
@@ -337,14 +348,23 @@ pub async fn send_faction_chat(
     // Process Tags
     let tags = extract_tags(&payload.content);
     for tag in tags {
-        let _ = sqlx::query(
-            "INSERT INTO notifications (user_id, content) 
-             SELECT id, $1 FROM users WHERE username = $2"
+        if let Ok(Some(tagged_id)) = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM users WHERE username = $1"
         )
-        .bind(format!("You were mentioned in faction comms by @{}", msg.author_name))
         .bind(&tag)
-        .execute(pool)
-        .await;
+        .fetch_optional(pool)
+        .await
+        {
+            let _ = sqlx::query(
+                "INSERT INTO notifications (user_id, content) VALUES ($1, $2)"
+            )
+            .bind(tagged_id)
+            .bind(format!("You were mentioned in faction comms by @{}", msg.author_name))
+            .execute(pool)
+            .await;
+
+            let _ = crate::push::notify_user(pool, tagged_id).await;
+        }
     }
 
     // Broadcast to WS

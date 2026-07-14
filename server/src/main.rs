@@ -24,6 +24,7 @@ mod rank;
 mod inf_limit;
 mod rate_limit;
 mod titles;
+mod push;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -366,6 +367,7 @@ async fn main() {
         
         // Notifications
         .route("/api/notifications", axum::routing::get(notifications::get_notifications).post(notifications::mark_notifications_read))
+        .route("/api/notifications/latest", get(notifications::get_latest_notification))
 
         // Direct Messaging
         .route("/api/chat/direct", axum::routing::post(dm::send_dm).get(dm::get_chat_list))
@@ -447,6 +449,11 @@ async fn main() {
 
         // Activity
         .route("/api/activity/recent", get(crate::game::get_recent_activity))
+
+        // Push Notifications
+        .route("/api/push/vapid-public-key", get(push::get_vapid_public_key))
+        .route("/api/push/subscribe", axum::routing::post(push::subscribe))
+        .route("/api/push/unsubscribe", axum::routing::post(push::unsubscribe))
 
         // Websocket
         .route("/api/ws", get(ws::ws_handler))

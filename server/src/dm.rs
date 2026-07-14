@@ -103,6 +103,9 @@ pub async fn send_dm(
     .execute(pool)
     .await;
 
+    // Send push notification to the receiver
+    let _ = crate::push::notify_user(pool, receiver_id).await;
+
     // Broadcast a Notification event via WebSocket so only the receiver gets a real-time popup
     let event = crate::ws::GameEvent::Notification {
         from: sender_name.clone(),

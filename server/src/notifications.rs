@@ -38,6 +38,43 @@ pub async fn get_notifications(
     Json(notifications)
 }
 
+/// Get the latest unread notification — used by the Service Worker
+/// to display push notification content after receiving a VAPID ping.
+pub async fn get_latest_notification(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    let notif = sqlx::query_as::<_, NotificationResponse>(
+        r#"
+        SELECT id, content, is_read, created_at
+        FROM notifications
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#
+    )
+    .bind(auth_user.user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    match notif {
+        Some(n) => Ok(Json(serde_json::json!({
+            "title": "Dept.OS",
+            "body": n.content,
+            "id": n.id,
+            "is_read": n.is_read,
+            "created_at": n.created_at
+        }))),
+        None => Ok(Json(serde_json::json!({
+            "title": "Dept.OS",
+            "body": "You have a new notification"
+        }))),
+    }
+}
+
 pub async fn mark_notifications_read(
     auth_user: AuthUser,
     State(state): State<ServerState>,

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import Link from 'next/link';
 import { Search, User, MessageSquare } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
@@ -34,7 +35,7 @@ export default function ChatsIndexPage() {
     staleTime: 30_000,
   });
 
-  const { data: chats } = useQuery<ChatListItem[]>({
+  const { data: chats, refetch: refetchChats } = useQuery<ChatListItem[]>({
     queryKey: ['chats'],
     queryFn: async () => {
       const res = await apiFetch('/api/chat/direct');
@@ -49,7 +50,7 @@ export default function ChatsIndexPage() {
         <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text">Direct Channels</h2>
       </header>
 
-      <div className="flex-1 p-8 bg-[#050505] overflow-y-auto">
+      <PullToRefresh onRefresh={refetchChats} className="flex-1 p-8 bg-[#050505]">
         <div className="max-w-lg mx-auto space-y-8">
           <div className="relative">
             <Search className="absolute left-4 top-3 text-zinc-500" size={18} />
@@ -104,7 +105,7 @@ export default function ChatsIndexPage() {
             </div>
           )}
         </div>
-      </div>
+      </PullToRefresh>
     </DashboardLayout>
   );
 }

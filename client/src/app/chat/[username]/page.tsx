@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import { apiFetch, WS_URL } from '@/lib/api';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
@@ -32,7 +33,7 @@ export default function DirectChatPage() {
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef<number>(0);
 
-  const { data: messages, isLoading } = useQuery<Message[]>({
+  const { data: messages, isLoading, refetch } = useQuery<Message[]>({
     queryKey: ['chat', username],
     queryFn: async () => {
       const res = await apiFetch(`/api/chat/direct/${username}`);
@@ -172,18 +173,20 @@ export default function DirectChatPage() {
       </header>
 
       <div className="flex-1 flex flex-col overflow-hidden bg-[#050505]">
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 space-y-4">
-          {isLoading ? (
-            <div className="text-center text-green-500 text-sm animate-pulse font-mono">// Decrypting history...</div>
-          ) : messages?.map(msg => (
-            <div key={msg.id} className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[70%] p-4 rounded border ${msg.sender_id === user?.id ? 'bg-green-500/10 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
-                <p className="text-sm text-zinc-100 font-mono">{msg.content}</p>
-                <span className="text-[9px] text-zinc-500 mt-2 block">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        <PullToRefresh ref={scrollRef} onRefresh={refetch} className="flex-1">
+          <div className="flex-1 p-8 space-y-4">
+            {isLoading ? (
+              <div className="text-center text-green-500 text-sm animate-pulse font-mono">// Decrypting history...</div>
+            ) : messages?.map(msg => (
+              <div key={msg.id} className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[70%] p-4 rounded border ${msg.sender_id === user?.id ? 'bg-green-500/10 border-green-500/30' : 'bg-zinc-900 border-zinc-800'}`}>
+                  <p className="text-sm text-zinc-100 font-mono">{msg.content}</p>
+                  <span className="text-[9px] text-zinc-500 mt-2 block">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </PullToRefresh>
 
         <div className="p-6 border-t border-zinc-800 bg-black/60 backdrop-blur">
           <div className="flex gap-4">

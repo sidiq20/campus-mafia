@@ -8,6 +8,7 @@ import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
 import { BroadcastCooldown } from '@/components/BroadcastCooldown';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
 
@@ -41,7 +42,7 @@ export default function Dashboard() {
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: posts, isLoading } = useQuery<Post[]>({
+  const { data: posts, isLoading, refetch } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: async () => {
       const res = await apiFetch('/api/posts');
@@ -138,64 +139,66 @@ export default function Dashboard() {
         />
       </header>
       
-      <div className="flex-1 overflow-y-auto p-8 space-y-8 pb-24">
-        {/* Daily INF Tracker */}
-        <div className="max-w-2xl mx-auto">
-          <DailyInfTracker />
-        </div>
-
-        {/* Post Input */}
-        <div className="p-6 border border-zinc-800 bg-black/60 backdrop-blur rounded-lg focus-within:border-green-500/50 transition-all duration-300 shadow-[0_0_20px_rgba(0,0,0,0.5)] animate-slide-in">
-          <textarea 
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="w-full bg-transparent resize-none outline-none text-sm placeholder:text-zinc-600 text-zinc-100" 
-            placeholder="Broadcast encrypted intel..."
-            rows={3}
-          ></textarea>
-          <div className="flex justify-between items-center mt-4 border-t border-zinc-800 pt-4">
-            <div className="flex items-center gap-3">
-              <BroadcastCooldown />
-              <span className="text-[10px] text-zinc-500 uppercase tracking-widest"><TrendingUp size={10} className="inline mr-1" />+10 INF Reward</span>
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors">
-                <input 
-                  type="checkbox" 
-                  checked={isAnonymous} 
-                  onChange={(e) => setIsAnonymous(e.target.checked)} 
-                  className="accent-green-500"
-                />
-                <ShieldAlert size={14} /> Incognito
-              </label>
-            </div>
-            <button 
-              onClick={handleBroadcast}
-              disabled={mutation.isPending || !content.trim()}
-              className="px-6 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all duration-300 disabled:opacity-50"
-            >
-              {mutation.isPending ? 'Transmitting...' : 'Broadcast'}
-            </button>
+      <PullToRefresh onRefresh={refetch} className="flex-1">
+        <div className="p-8 space-y-8 pb-24">
+          {/* Daily INF Tracker */}
+          <div className="max-w-2xl mx-auto">
+            <DailyInfTracker />
           </div>
-        </div>
 
-        {/* Real Posts */}
-        {isLoading ? (
-          <div className="text-center text-green-500 text-sm py-12 animate-pulse font-mono">// Scanning frequencies...</div>
-        ) : filteredPosts?.length === 0 ? (
-          <div className="text-center text-zinc-600 text-sm py-12">No intel matches your search.</div>
-        ) : (
-          <div className="space-y-6">
-            {filteredPosts?.map((post, i) => (
-              <div key={post.id} className="animate-slide-in" style={{ animationDelay: `${i * 100}ms` }}>
-                <PostCard 
-                  post={post}
-                  isMine={!!user && user.id === post.user_id}
-                  isAnonymousUser={!user}
-                />
+          {/* Post Input */}
+          <div className="p-6 border border-zinc-800 bg-black/60 backdrop-blur rounded-lg focus-within:border-green-500/50 transition-all duration-300 shadow-[0_0_20px_rgba(0,0,0,0.5)] animate-slide-in">
+            <textarea 
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className="w-full bg-transparent resize-none outline-none text-sm placeholder:text-zinc-600 text-zinc-100" 
+              placeholder="Broadcast encrypted intel..."
+              rows={3}
+            ></textarea>
+            <div className="flex justify-between items-center mt-4 border-t border-zinc-800 pt-4">
+              <div className="flex items-center gap-3">
+                <BroadcastCooldown />
+                <span className="text-[10px] text-zinc-500 uppercase tracking-widest"><TrendingUp size={10} className="inline mr-1" />+10 INF Reward</span>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={isAnonymous} 
+                    onChange={(e) => setIsAnonymous(e.target.checked)} 
+                    className="accent-green-500"
+                  />
+                  <ShieldAlert size={14} /> Incognito
+                </label>
               </div>
-            ))}
+              <button 
+                onClick={handleBroadcast}
+                disabled={mutation.isPending || !content.trim()}
+                className="px-6 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all duration-300 disabled:opacity-50"
+              >
+                {mutation.isPending ? 'Transmitting...' : 'Broadcast'}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Real Posts */}
+          {isLoading ? (
+            <div className="text-center text-green-500 text-sm py-12 animate-pulse font-mono">// Scanning frequencies...</div>
+          ) : filteredPosts?.length === 0 ? (
+            <div className="text-center text-zinc-600 text-sm py-12">No intel matches your search.</div>
+          ) : (
+            <div className="space-y-6">
+              {filteredPosts?.map((post, i) => (
+                <div key={post.id} className="animate-slide-in" style={{ animationDelay: `${i * 100}ms` }}>
+                  <PostCard 
+                    post={post}
+                    isMine={!!user && user.id === post.user_id}
+                    isAnonymousUser={!user}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </PullToRefresh>
     </DashboardLayout>
   );
 }

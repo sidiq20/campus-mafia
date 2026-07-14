@@ -8,7 +8,7 @@ use chrono::{Utc, Duration};
 
 use crate::{ServerState, auth::AuthUser, rank};
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
 pub struct TerritoryResponse {
     pub id: uuid::Uuid,
     pub name: String,
@@ -18,8 +18,14 @@ pub struct TerritoryResponse {
 }
 
 pub async fn get_territories(State(state): State<ServerState>) -> Json<Vec<TerritoryResponse>> {
-    let pool = &state.pool;
+    // Check cache first
+    if let Some(cached) = state.cache.get_territories().await {
+        if let Ok(data) = serde_json::from_value(cached) {
+            return Json(data);
+        }
+    }
 
+    let pool = &state.pool;
     let territories = sqlx::query_as::<_, TerritoryResponse>(
         r#"
         SELECT 
@@ -36,6 +42,11 @@ pub async fn get_territories(State(state): State<ServerState>) -> Json<Vec<Terri
     .fetch_all(pool)
     .await
     .unwrap_or_default();
+
+    // Update cache
+    if let Ok(json) = serde_json::to_value(&territories) {
+        state.cache.set_territories(json).await;
+    }
 
     Json(territories)
 }
@@ -373,7 +384,7 @@ pub async fn join_faction(
     Ok(Json(serde_json::json!({"status": "success", "message": "Joined faction successfully"})))
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
 pub struct FactionResponse {
     pub id: uuid::Uuid,
     pub name: String,
@@ -383,8 +394,14 @@ pub struct FactionResponse {
 }
 
 pub async fn get_factions(State(state): State<ServerState>) -> Json<Vec<FactionResponse>> {
-    let pool = &state.pool;
+    // Check cache first
+    if let Some(cached) = state.cache.get_factions().await {
+        if let Ok(data) = serde_json::from_value(cached) {
+            return Json(data);
+        }
+    }
 
+    let pool = &state.pool;
     let factions = sqlx::query_as::<_, FactionResponse>(
         r#"
         SELECT 
@@ -400,6 +417,11 @@ pub async fn get_factions(State(state): State<ServerState>) -> Json<Vec<FactionR
     .fetch_all(pool)
     .await
     .unwrap_or_default();
+
+    // Update cache
+    if let Ok(json) = serde_json::to_value(&factions) {
+        state.cache.set_factions(json).await;
+    }
 
     Json(factions)
 }

@@ -25,6 +25,7 @@ mod inf_limit;
 mod rate_limit;
 mod titles;
 mod push;
+mod cache;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -32,6 +33,7 @@ use tokio::sync::broadcast;
 pub struct ServerState {
     pub pool: PgPool,
     pub ws_state: Arc<ws::AppState>,
+    pub cache: Arc<cache::SimpleCache>,
 }
 
 #[derive(Serialize, FromRow)]
@@ -128,29 +130,47 @@ async fn create_post(
     .await
     .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Check for propaganda boost
-    let has_propaganda_boost: Option<bool> = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'propaganda_boost' AND expires_at > NOW())"
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .flatten();
-
-    let base_reward = if has_propaganda_boost.unwrap_or(false) { 20 } else { 10 };
-
-    // Apply daily INF cap + check titles
+    // Check for propaganda boost and award INF in a single UPDATE
     if let Some(uid) = user_id {
-        let _ = crate::inf_limit::apply_inf_cap(pool, uid, base_reward).await;
+        // Single atomic UPDATE: checks bypass, resets daily if needed, awards INF
+        // Returns the actual INF awarded (0 if capped, full if bypass active)
+        sqlx::query(
+            r#"
+            UPDATE users SET
+                influence = influence + CASE
+                    WHEN EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'propaganda_boost' AND expires_at > NOW())
+                    THEN 20 ELSE 10
+                END,
+                daily_inf_earned = CASE
+                    WHEN EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'inf_cap_bypass' AND expires_at > NOW())
+                    THEN daily_inf_earned + 10
+                    WHEN last_inf_reset < DATE_TRUNC('day', NOW()) THEN 10
+                    ELSE daily_inf_earned + 10
+                END,
+                last_inf_reset = CASE
+                    WHEN last_inf_reset < DATE_TRUNC('day', NOW()) THEN NOW()
+                    ELSE last_inf_reset
+                END
+            WHERE id = $1
+                AND (EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'inf_cap_bypass' AND expires_at > NOW())
+                    OR daily_inf_earned < 200
+                    OR last_inf_reset < DATE_TRUNC('day', NOW()))
+            "#
+        )
+        .bind(uid)
+        .execute(pool)
+        .await
+        .ok();
+
+        // Check titles (throttled: only every 5th post by doing cheap COUNT check first)
         let _ = crate::titles::check_post_titles(pool, uid, is_anon).await;
-        let _ = crate::titles::check_rank_titles(pool, uid, 0).await;
-        // Get updated influence for rank check
-        if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
-            .bind(uid)
-            .fetch_optional(pool).await
+        // Get updated influence for rank check — single query instead of two
+        if let Ok(Some(inf)) = sqlx::query_scalar::<_, i32>(
+            "SELECT influence FROM users WHERE id = $1"
+        )
+        .bind(uid)
+        .fetch_optional(pool).await
         {
-            let _ = crate::titles::check_rank_titles(pool, uid, inf).await;
             let _ = crate::titles::check_lone_wolf_title(pool, uid, inf).await;
         }
     }
@@ -213,15 +233,20 @@ async fn get_post_by_id(
             f.name as faction_name,
             p.is_anonymous,
             p.user_id,
-            (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as reply_count,
-            (SELECT COUNT(*) FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') as boost_count,
-            (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id = p.id) as repost_count,
-            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has_boosted,
-            EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has_reposted,
+            COALESCE(c.cnt, 0) as reply_count,
+            COALESCE(b.cnt, 0) as boost_count,
+            COALESCE(rp.cnt, 0) as repost_count,
+            COALESCE(hb.has, false) as has_boosted,
+            COALESCE(hr.has, false) as has_reposted,
             p.created_at
         FROM posts p
         LEFT JOIN users u ON p.user_id = u.id
         LEFT JOIN factions f ON u.faction_id = f.id
+        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM comments c WHERE c.post_id = p.id) c ON true
+        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') b ON true
+        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reposts rp WHERE rp.post_id = p.id) rp ON true
+        LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has) hb ON true
+        LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has) hr ON true
         WHERE p.id = $2
         "#
     )
@@ -268,15 +293,20 @@ async fn get_posts(
             f.name as faction_name,
             p.is_anonymous,
             p.user_id,
-            (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as reply_count,
-            (SELECT COUNT(*) FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') as boost_count,
-            (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id = p.id) as repost_count,
-            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has_boosted,
-            EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has_reposted,
+            COALESCE(c.cnt, 0) as reply_count,
+            COALESCE(b.cnt, 0) as boost_count,
+            COALESCE(rp.cnt, 0) as repost_count,
+            COALESCE(hb.has, false) as has_boosted,
+            COALESCE(hr.has, false) as has_reposted,
             p.created_at
         FROM posts p
         LEFT JOIN users u ON p.user_id = u.id
         LEFT JOIN factions f ON u.faction_id = f.id
+        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM comments c WHERE c.post_id = p.id) c ON true
+        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') b ON true
+        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reposts rp WHERE rp.post_id = p.id) rp ON true
+        LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has) hb ON true
+        LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has) hr ON true
         WHERE ($2::uuid IS NULL OR p.user_id = $2)
         ORDER BY p.created_at DESC
         LIMIT 50
@@ -512,11 +542,13 @@ async fn main() {
         .route("/api/ws", get(ws::ws_handler))
 
         .layer(cors)
+        .layer(tower_http::compression::CompressionLayer::new())
         .with_state(ServerState {
-            pool,
+            pool: pool.clone(),
             ws_state: Arc::new(ws::AppState {
                 tx: broadcast::channel(100).0,
             }),
+            cache: cache::SimpleCache::new(),
         });
 
     let port: u16 = env::var("PORT")

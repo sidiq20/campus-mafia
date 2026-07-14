@@ -84,7 +84,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error('Network response was not ok');
       return res.json();
     },
-    staleTime: 10_000,
+    staleTime: 30_000,
   });
 
   const filteredPosts = searchQuery.trim()

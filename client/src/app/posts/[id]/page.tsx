@@ -64,7 +64,7 @@ export default function PostDetailPage() {
       if (!res.ok) throw new Error('Post not found');
       return res.json();
     },
-    staleTime: 10_000,
+    staleTime: 30_000,
   });
 
   const { data: comments, refetch: refetchComments } = useQuery<Comment[]>({
@@ -73,7 +73,7 @@ export default function PostDetailPage() {
       const res = await apiFetch(`/api/posts/${id}/comments`);
       return res.json();
     },
-    staleTime: 5_000,
+    staleTime: 30_000,
   });
 
   const boostMutation = useMutation({

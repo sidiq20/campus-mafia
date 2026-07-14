@@ -54,6 +54,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (data.type === 'NewPost') { title = 'Intel Drop'; body = `@${data.author} broadcasted a message.`; toast(title, { description: body }); }
         if (data.type === 'TerritoryAttacked') { title = 'Attack Detected'; body = `${data.territory_name} was hit!`; toast.error(title, { description: body }); }
         if (data.type === 'TerritoryCaptured') { title = 'Territory Captured'; body = `${data.territory_name} was taken!`; toast.success(title, { description: body }); }
+        if (data.type === 'Notification' && data.target_username === user?.username) {
+          title = data.from ? `DM from ${data.from}` : 'New Message';
+          body = 'You have a new direct message';
+          toast.info(body, { description: data.from ? `From: ${data.from}` : undefined });
+          // Also invalidate notifications badge so the red dot updates
+          queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        }
         
         if (title && "Notification" in window && Notification.permission === "granted" && document.hidden) {
           new Notification(title, { body });

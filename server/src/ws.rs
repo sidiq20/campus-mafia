@@ -34,6 +34,12 @@ pub enum GameEvent {
         territory_name: String,
         new_faction: Option<String>,
     },
+    /// User-specific notification — used to signal new DMs, mentions, etc.
+    /// The client filters by `target_username` to avoid spamming all users.
+    Notification {
+        from: Option<String>,
+        target_username: String,
+    },
 }
 
 pub async fn ws_handler(

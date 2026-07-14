@@ -57,6 +57,38 @@ pub async fn send_dm(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Insert notification for the receiver
+    let sender_name: Option<String> = sqlx::query_scalar(
+        "SELECT COALESCE(display_name, username) FROM users WHERE id = $1"
+    )
+    .bind(auth_user.user_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    let notification_content = match &sender_name {
+        Some(name) => format!("📩 New DM from {}", name),
+        None => "📩 You received a new direct message".to_string(),
+    };
+
+    let _ = sqlx::query(
+        "INSERT INTO notifications (user_id, content) VALUES ($1, $2)"
+    )
+    .bind(receiver_id)
+    .bind(&notification_content)
+    .execute(pool)
+    .await;
+
+    // Broadcast a Notification event via WebSocket so only the receiver gets a real-time popup
+    let event = crate::ws::GameEvent::Notification {
+        from: sender_name.clone(),
+        target_username: payload.receiver_username.clone(),
+    };
+    if let Ok(event_json) = serde_json::to_string(&event) {
+        let _ = state.ws_state.tx.send(event_json);
+    }
+
     Ok(Json(dm))
 }
 

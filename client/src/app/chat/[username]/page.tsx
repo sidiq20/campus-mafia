@@ -85,7 +85,7 @@ export default function DirectChatPage() {
               onChange={e => setContent(e.target.value)}
               className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-4 py-3 text-sm outline-none focus:border-green-500/50 text-zinc-200"
               placeholder="Secure transmission..."
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && mutation.mutate({ receiver_username: username, content })}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && content.trim() && mutation.mutate({ receiver_username: username, content: content.trim() })}
             />
             <button 
               onClick={() => mutation.mutate({ receiver_username: username, content })}

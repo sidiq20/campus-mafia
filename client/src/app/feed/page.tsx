@@ -441,7 +441,9 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           )}
         </div>
       </div>
-      <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono">{post.content}</p>
+      <Link href={`/posts/${post.id}`} className="block group">
+        <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono group-hover:text-green-300 transition-colors">{post.content}</p>
+      </Link>
       <div className="flex justify-between items-center pt-4 border-t border-zinc-800/50">
         <div className="flex gap-4 sm:gap-6">
           <button 

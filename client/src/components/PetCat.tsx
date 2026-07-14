@@ -140,6 +140,7 @@ export default function PetCat({ recentActivity }: { recentActivity: string[] })
 
   // Touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault(); // prevent page scroll while dragging cat
     const touch = e.touches[0];
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect && touch) {

@@ -1,6 +1,22 @@
 "use client";
 
 import { useState } from 'react';
+
+// Shared Post type for profile cards
+type Post = {
+  id: string;
+  content: string;
+  influence_earned: number;
+  author_name: string;
+  author_username: string | null;
+  faction_name: string | null;
+  is_anonymous: boolean | null;
+  user_id: string | null;
+  reply_count: number;
+  has_boosted: boolean;
+  has_reposted: boolean;
+  created_at: string;
+};
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
 import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award, MessageSquare, Radio, TrendingUp, BookOpen, Pin } from 'lucide-react';
@@ -9,7 +25,8 @@ import { TitleSection } from '@/components/TitleBadge';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // Types for profile data
 type ProfileBroadcast = {
@@ -202,10 +219,11 @@ export default function ProfilePage() {
 
 function ProfileBroadcastsSection() {
   const { user } = useUser();
-  const { data: broadcasts, isLoading } = useQuery<ProfileBroadcast[]>({
-    queryKey: ['profile-broadcasts'],
+  const queryClient = useQueryClient();
+  const { data: posts, isLoading } = useQuery<Post[]>({
+    queryKey: ['profile-posts'],
     queryFn: async () => {
-      const res = await apiFetch('/api/profile/broadcasts');
+      const res = await apiFetch('/api/posts?author_id=me');
       if (!res.ok) return [];
       return res.json();
     },
@@ -220,25 +238,69 @@ function ProfileBroadcastsSection() {
       </h3>
       {isLoading ? (
         <p className="text-xs text-zinc-600 animate-pulse">Decrypting logs...</p>
-      ) : !broadcasts || broadcasts.length === 0 ? (
+      ) : !posts || posts.length === 0 ? (
         <p className="text-xs text-zinc-600 italic">No transmissions yet.</p>
       ) : (
-        <div className="space-y-3 max-h-80 overflow-y-auto">
-          {broadcasts.map(b => (
-            <div key={b.id} className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-colors">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-green-600">
-                  {b.channel_type === 'global' ? 'Global Channel' : 'Faction Channel'}
-                </span>
-                <span className="text-[9px] font-mono text-zinc-600">
-                  {new Date(b.created_at).toLocaleDateString()}
-                </span>
-              </div>
-              <p className="text-xs text-zinc-300 leading-relaxed">{b.content}</p>
-            </div>
+        <div className="space-y-4 max-h-96 overflow-y-auto">
+          {posts.map(p => (
+            <ProfilePostCard key={p.id} post={p} isMine={true} queryClient={queryClient} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ProfilePostCard({ post, isMine, queryClient }: { post: Post; isMine: boolean; queryClient: any }) {
+  const { user } = useUser();
+  const [showComments, setShowComments] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const isPinned = user?.pinned_post_id === post.id;
+
+  const boostMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/posts/${post.id}/react`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reaction_type: 'boost' })
+      });
+      if (!res.ok) throw new Error('Failed to boost');
+    },
+    onSuccess: () => {
+      toast.success("Boosted (+1 INF)");
+      queryClient.invalidateQueries({ queryKey: ['profile-posts'] });
+    }
+  });
+
+  const repostMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/posts/${post.id}/repost`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to repost');
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success('Repost toggled');
+      queryClient.invalidateQueries({ queryKey: ['profile-posts'] });
+    }
+  });
+
+  return (
+    <div className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-all">
+      <Link href={`/posts/${post.id}`} className="block">
+        <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors">{post.content}</p>
+      </Link>
+      <div className="flex items-center gap-4 pt-3 border-t border-zinc-800/50">
+        <button onClick={() => boostMutation.mutate()} disabled={boostMutation.isPending || post.has_boosted}
+          className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}>
+          <Zap size={12} className={post.has_boosted ? "fill-green-500" : ""} /> {post.has_boosted ? 'Boosted' : 'Boost'}
+        </button>
+        <span className="text-[10px] text-zinc-500 uppercase tracking-widest"><MessageSquare size={12} className="inline mr-1" />{post.reply_count}</span>
+        {isMine && (
+          <span className={`text-[10px] font-bold uppercase tracking-widest ${isPinned ? 'text-yellow-500' : 'text-zinc-600'}`}>
+            <Pin size={12} className={isPinned ? 'fill-yellow-500 inline' : 'inline'} /> {isPinned ? 'Pinned' : ''}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

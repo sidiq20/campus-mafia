@@ -2,11 +2,29 @@
 
 import { useParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import { User, Shield, Zap, Target, AlertTriangle } from 'lucide-react';
+import { User, Shield, Zap, Target, AlertTriangle, Radio, MessageSquare, Pin } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
 import Link from 'next/link';
+import { toast } from 'sonner';
+import { useUser } from '@/contexts/UserContext';
+
+// Shared Post type for profile card
+type Post = {
+  id: string;
+  content: string;
+  influence_earned: number;
+  author_name: string;
+  author_username: string | null;
+  faction_name: string | null;
+  is_anonymous: boolean | null;
+  user_id: string | null;
+  reply_count: number;
+  has_boosted: boolean;
+  has_reposted: boolean;
+  created_at: string;
+};
 
 export default function UserProfilePage() {
   const params = useParams();
@@ -107,8 +125,88 @@ export default function UserProfilePage() {
               <p className="text-3xl font-bold text-zinc-100">{user.heat_level}%</p>
             </div>
           </div>
+
+          {/* Their Broadcasts */}
+          <OtherUserPostsSection username={username} />
+
         </div>
       </div>
     </DashboardLayout>
   );
 }
+
+function OtherUserPostsSection({ username }: { username: string }) {
+  const queryClient = useQueryClient();
+  const { data: posts, isLoading } = useQuery<Post[]>({
+    queryKey: ['user-posts', username],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/posts?author_id=${username}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  return (
+    <div className="border border-zinc-800 bg-black/40 p-6 rounded-lg">
+      <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <Radio size={18} className="text-green-500" /> Broadcasts
+      </h3>
+      {isLoading ? (
+        <p className="text-xs text-zinc-600 animate-pulse">Decrypting transmissions...</p>
+      ) : !posts || posts.length === 0 ? (
+        <p className="text-xs text-zinc-600 italic">No broadcasts yet.</p>
+      ) : (
+        <div className="space-y-4 max-h-96 overflow-y-auto">
+          {posts.map(p => (
+            <OtherUserPostCard key={p.id} post={p} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OtherUserPostCard({ post }: { post: Post }) {
+  const queryClient = useQueryClient();
+  const { user: localUser } = useUser();
+
+  const boostMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/posts/${post.id}/react`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reaction_type: 'boost' })
+      });
+      if (!res.ok) throw new Error('Failed to boost');
+    },
+    onSuccess: () => {
+      toast.success("Boosted (+1 INF)");
+      queryClient.invalidateQueries({ queryKey: ['user-posts', post.author_name] });
+    }
+  });
+
+  const handleBoost = () => {
+    if (!localUser) {
+      toast.error('Login first');
+      return;
+    }
+    boostMutation.mutate();
+  };
+
+  return (
+    <div className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-all">
+      <Link href={`/posts/${post.id}`} className="block">
+        <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors">{post.content}</p>
+      </Link>
+      <div className="flex items-center gap-4 pt-3 border-t border-zinc-800/50">
+        <button onClick={handleBoost} disabled={boostMutation.isPending || post.has_boosted}
+          className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}>
+          <Zap size={12} className={post.has_boosted ? "fill-green-500" : ""} /> {post.has_boosted ? 'Boosted' : 'Boost'}
+        </button>
+        <span className="text-[10px] text-zinc-500 uppercase tracking-widest"><MessageSquare size={12} className="inline mr-1" />{post.reply_count}</span>
+      </div>
+    </div>
+  );
+}
+

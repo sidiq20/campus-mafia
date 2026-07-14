@@ -152,12 +152,67 @@ async fn create_post(
     Ok(Json(post))
 }
 
+async fn get_post_by_id(
+    auth_user: OptionalAuthUser,
+    State(state): State<ServerState>,
+    axum::extract::Path(post_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<Json<PostResponse>, (axum::http::StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    let post = sqlx::query_as::<_, PostResponse>(
+        r#"
+        SELECT 
+            p.id, 
+            p.content, 
+            p.influence_earned, 
+            COALESCE(u.display_name, 'Anonymous') as author_name, 
+            u.username as author_username,
+            f.name as faction_name,
+            p.is_anonymous,
+            p.user_id,
+            (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as reply_count,
+            EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has_boosted,
+            EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has_reposted,
+            p.created_at
+        FROM posts p
+        LEFT JOIN users u ON p.user_id = u.id
+        LEFT JOIN factions f ON u.faction_id = f.id
+        WHERE p.id = $2
+        "#
+    )
+    .bind(user_id)
+    .bind(post_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((axum::http::StatusCode::NOT_FOUND, "Post not found".to_string()))?;
+
+    Ok(Json(post))
+}
+
 async fn get_posts(
     auth_user: OptionalAuthUser,
-    State(state): State<ServerState>
+    State(state): State<ServerState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Json<Vec<PostResponse>> {
     let pool = &state.pool;
     let user_id = auth_user.user_id;
+
+    // Support author_id=me to filter by current user
+    let author_filter = params.get("author_id").map(|s| s.as_str());
+    let target_user_id: Option<uuid::Uuid> = match author_filter {
+        Some("me") => user_id,
+        Some(username) => {
+            sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM users WHERE username = $1")
+                .bind(username)
+                .fetch_optional(&state.pool)
+                .await
+                .unwrap_or(None)
+        },
+        _ => None,
+    };
+
     let posts = sqlx::query_as::<_, PostResponse>(
         r#"
         SELECT 
@@ -176,11 +231,13 @@ async fn get_posts(
         FROM posts p
         LEFT JOIN users u ON p.user_id = u.id
         LEFT JOIN factions f ON u.faction_id = f.id
+        WHERE ($2::uuid IS NULL OR p.user_id = $2)
         ORDER BY p.created_at DESC
         LIMIT 50
         "#
     )
     .bind(user_id)
+    .bind(target_user_id)
     .fetch_all(pool)
     .await
     .unwrap_or_else(|_| vec![]);
@@ -318,7 +375,7 @@ async fn main() {
 
         // Posts
         .route("/api/posts", axum::routing::post(create_post).get(get_posts))
-        .route("/api/posts/:id", axum::routing::delete(delete_post))
+        .route("/api/posts/:id", axum::routing::get(get_post_by_id).delete(delete_post))
         .route(
             "/api/posts/:id/comments",
             axum::routing::post(social::create_comment)

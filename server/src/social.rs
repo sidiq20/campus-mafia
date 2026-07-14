@@ -13,12 +13,14 @@ pub struct CommentResponse {
     pub post_id: uuid::Uuid,
     pub content: String,
     pub author_display_name: String,
+    pub parent_id: Option<uuid::Uuid>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Deserialize)]
 pub struct CreateCommentRequest {
     pub content: String,
+    pub parent_id: Option<uuid::Uuid>,
 }
 
 pub async fn create_comment(
@@ -43,11 +45,27 @@ pub async fn create_comment(
         }
     }
 
+    // Verify parent_id belongs to the same post if provided
+    if let Some(pid) = payload.parent_id {
+        let valid: bool = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM comments WHERE id = $1 AND post_id = $2)"
+        )
+        .bind(pid)
+        .bind(post_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        if !valid {
+            return Err((StatusCode::BAD_REQUEST, "Parent comment not found for this post".to_string()));
+        }
+    }
+
     let comment = sqlx::query_as::<_, CommentResponse>(
         r#"
         WITH inserted AS (
-            INSERT INTO comments (post_id, user_id, content)
-            VALUES ($1, $2, $3)
+            INSERT INTO comments (post_id, user_id, content, parent_id)
+            VALUES ($1, $2, $3, $4)
             RETURNING id, post_id, content, user_id, created_at
         )
         SELECT 
@@ -63,6 +81,7 @@ pub async fn create_comment(
     .bind(post_id)
     .bind(user_id)
     .bind(payload.content)
+    .bind(payload.parent_id)
     .fetch_one(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -95,6 +114,7 @@ pub async fn get_comments(
             c.post_id,
             c.content,
             u.display_name as author_display_name,
+            c.parent_id,
             c.created_at
         FROM comments c
         JOIN users u ON c.user_id = u.id

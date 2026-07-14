@@ -69,6 +69,17 @@ pub async fn send_global_chat(
 ) -> Result<Json<ChatMessageResponse>, (StatusCode, String)> {
     let pool = &state.pool;
 
+    // Rate limit: max 2 broadcasts per minute, 1h ban on 3rd+ attempt
+    match crate::rate_limit::check_and_record(pool, auth_user.user_id, crate::rate_limit::ACTION_BROADCAST).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        crate::rate_limit::RateLimitResult::Allowed => {}
+        crate::rate_limit::RateLimitResult::Banned(until) => {
+            let remaining = (until - chrono::Utc::now()).num_seconds().max(0);
+            return Err((StatusCode::TOO_MANY_REQUESTS, format!("You have been temporarily banned from broadcasting for {} more seconds. Slow down!", remaining)));
+        }
+    }
+
     let msg = sqlx::query_as::<_, ChatMessageResponse>(
         r#"
         WITH inserted AS (
@@ -174,6 +185,17 @@ pub async fn send_faction_chat(
     Json(payload): Json<SendMessageRequest>,
 ) -> Result<Json<ChatMessageResponse>, (StatusCode, String)> {
     let pool = &state.pool;
+
+    // Rate limit: max 2 broadcasts per minute, 1h ban on 3rd+ attempt
+    match crate::rate_limit::check_and_record(pool, auth_user.user_id, crate::rate_limit::ACTION_BROADCAST).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        crate::rate_limit::RateLimitResult::Allowed => {}
+        crate::rate_limit::RateLimitResult::Banned(until) => {
+            let remaining = (until - chrono::Utc::now()).num_seconds().max(0);
+            return Err((StatusCode::TOO_MANY_REQUESTS, format!("You have been temporarily banned from broadcasting for {} more seconds. Slow down!", remaining)));
+        }
+    }
 
     // Verify user is in this faction
     let user_faction: Option<uuid::Uuid> = sqlx::query_scalar("SELECT faction_id FROM users WHERE id = $1")

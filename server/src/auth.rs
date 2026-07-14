@@ -44,7 +44,7 @@ pub struct RegisterRequest {
     pub username: String,
     pub email: String,
     pub password: String,
-    pub faction_name: String,
+    pub faction_name: Option<String>,
 }
 
 pub async fn register(
@@ -54,30 +54,32 @@ pub async fn register(
 ) -> Result<(CookieJar, Json<serde_json::Value>), (StatusCode, String)> {
     let pool = &state.pool;
 
-    let faction_id_opt = sqlx::query_scalar::<_, uuid::Uuid>(
-        "SELECT id FROM factions WHERE name = $1"
-    )
-    .bind(&payload.faction_name)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let faction_id: Option<uuid::Uuid> = if let Some(ref faction_name) = payload.faction_name {
+        let fid = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM factions WHERE name = $1"
+        )
+        .bind(faction_name)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::BAD_REQUEST, "Invalid faction name".to_string()))?;
 
-    let faction_id = match faction_id_opt {
-        Some(id) => id,
-        None => return Err((StatusCode::BAD_REQUEST, "Invalid faction name".to_string())),
+        let member_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM users WHERE faction_id = $1"
+        )
+        .bind(fid)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        if member_count >= 50 {
+            return Err((StatusCode::BAD_REQUEST, "Faction is full (maximum 50 users)".to_string()));
+        }
+
+        Some(fid)
+    } else {
+        None
     };
-    
-    let member_count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM users WHERE faction_id = $1"
-    )
-    .bind(faction_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    if member_count >= 50 {
-        return Err((StatusCode::BAD_REQUEST, "Faction is full (maximum 50 users)".to_string()));
-    }
 
     let hashed_pw = hash(&payload.password, DEFAULT_COST).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let user_id = sqlx::query_scalar::<_, uuid::Uuid>(
@@ -381,4 +383,102 @@ pub async fn update_profile(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     me(auth_user, State(state)).await
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct UserSearchResult {
+    pub id: uuid::Uuid,
+    pub username: String,
+    pub display_name: String,
+}
+
+pub async fn search_users(
+    State(state): State<crate::ServerState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<Vec<UserSearchResult>> {
+    let pool = &state.pool;
+    let query = params.get("q").cloned().unwrap_or_default();
+
+    if query.is_empty() {
+        return Json(vec![]);
+    }
+
+    let pattern = format!("%{}%", query);
+    let users = sqlx::query_as::<_, UserSearchResult>(
+        r#"
+        SELECT id, username, display_name
+        FROM users
+        WHERE username ILIKE $1 OR display_name ILIKE $1
+        ORDER BY influence DESC
+        LIMIT 20
+        "#
+    )
+    .bind(&pattern)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    Json(users)
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ProfileBroadcast {
+    pub id: uuid::Uuid,
+    pub content: String,
+    pub channel_type: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn get_profile_broadcasts(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+) -> Result<Json<Vec<ProfileBroadcast>>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let broadcasts = sqlx::query_as::<_, ProfileBroadcast>(
+        r#"
+        SELECT id, content, channel_type, created_at
+        FROM chat_messages
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 20
+        "#
+    )
+    .bind(auth_user.user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(broadcasts))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct BoostedPost {
+    pub id: uuid::Uuid,
+    pub content: String,
+    pub author_name: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn get_boosted_posts(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+) -> Result<Json<Vec<BoostedPost>>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let posts = sqlx::query_as::<_, BoostedPost>(
+        r#"
+        SELECT p.id, p.content, COALESCE(u.display_name, 'Anonymous') as author_name, p.created_at
+        FROM reactions r
+        JOIN posts p ON r.post_id = p.id
+        LEFT JOIN users u ON p.user_id = u.id
+        WHERE r.user_id = $1 AND r.reaction_type = 'boost'
+        ORDER BY p.created_at DESC
+        LIMIT 20
+        "#
+    )
+    .bind(auth_user.user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(posts))
 }

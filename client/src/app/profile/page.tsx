@@ -3,12 +3,28 @@
 import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
-import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award } from 'lucide-react';
+import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award, MessageSquare, Radio, TrendingUp } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
 import { TitleSection } from '@/components/TitleBadge';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
+
+// Types for profile data
+type ProfileBroadcast = {
+  id: string;
+  content: string;
+  channel_type: string;
+  created_at: string;
+};
+
+type BoostedPost = {
+  id: string;
+  content: string;
+  author_name: string;
+  created_at: string;
+};
 
 export default function ProfilePage() {
   const { user, isLoading, refetch } = useUser();
@@ -126,8 +142,98 @@ export default function ProfilePage() {
             <TitleSection />
           </div>
 
+          {/* Broadcasts Section */}
+          <ProfileBroadcastsSection />
+
+          {/* Boosted Posts Section */}
+          <ProfileBoostedSection />
+
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+function ProfileBroadcastsSection() {
+  const { user } = useUser();
+  const { data: broadcasts, isLoading } = useQuery<ProfileBroadcast[]>({
+    queryKey: ['profile-broadcasts'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/profile/broadcasts');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
+  return (
+    <div className="border border-zinc-800 bg-zinc-900/30 p-6 rounded-xl">
+      <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <Radio size={18} className="text-green-500" /> Recent Transmissions
+      </h3>
+      {isLoading ? (
+        <p className="text-xs text-zinc-600 animate-pulse">Decrypting logs...</p>
+      ) : !broadcasts || broadcasts.length === 0 ? (
+        <p className="text-xs text-zinc-600 italic">No transmissions yet.</p>
+      ) : (
+        <div className="space-y-3 max-h-80 overflow-y-auto">
+          {broadcasts.map(b => (
+            <div key={b.id} className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-green-600">
+                  {b.channel_type === 'global' ? 'Global Channel' : 'Faction Channel'}
+                </span>
+                <span className="text-[9px] font-mono text-zinc-600">
+                  {new Date(b.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">{b.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProfileBoostedSection() {
+  const { user } = useUser();
+  const { data: boosted, isLoading } = useQuery<BoostedPost[]>({
+    queryKey: ['profile-boosted'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/profile/boosted');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
+  return (
+    <div className="border border-zinc-800 bg-zinc-900/30 p-6 rounded-xl">
+      <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <TrendingUp size={18} className="text-yellow-500" /> Boosted Intel
+      </h3>
+      {isLoading ? (
+        <p className="text-xs text-zinc-600 animate-pulse">Scanning...</p>
+      ) : !boosted || boosted.length === 0 ? (
+        <p className="text-xs text-zinc-600 italic">No boosted intel yet.</p>
+      ) : (
+        <div className="space-y-3 max-h-80 overflow-y-auto">
+          {boosted.map(p => (
+            <div key={p.id} className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-yellow-500/20 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[9px] font-bold text-yellow-600 uppercase tracking-widest">
+                  By {p.author_name}
+                </span>
+                <span className="text-[9px] font-mono text-zinc-600">
+                  {new Date(p.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">{p.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

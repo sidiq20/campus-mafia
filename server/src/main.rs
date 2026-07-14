@@ -22,6 +22,7 @@ mod dm;
 mod ws;
 mod rank;
 mod inf_limit;
+mod rate_limit;
 mod titles;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -267,6 +268,9 @@ async fn main() {
         .route("/api/auth/logout", axum::routing::post(auth::logout))
         .route("/api/auth/me", get(auth::me).put(auth::update_profile))
         .route("/api/users/:username", get(auth::get_user_by_username))
+        .route("/api/users/search", get(auth::search_users))
+        .route("/api/profile/broadcasts", get(auth::get_profile_broadcasts))
+        .route("/api/profile/boosted", get(auth::get_boosted_posts))
 
         // Social
         .route("/api/leaderboard", get(social::get_leaderboard))

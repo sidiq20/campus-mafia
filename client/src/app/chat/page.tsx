@@ -24,11 +24,13 @@ export default function ChatsIndexPage() {
   const [search, setSearch] = useState('');
   
   const { data: users } = useQuery<UserData[]>({
-    queryKey: ['users'],
+    queryKey: ['users', search],
     queryFn: async () => {
-      const res = await apiFetch('/api/leaderboard');
+      if (!search.trim()) return [];
+      const res = await apiFetch(`/api/users/search?q=${encodeURIComponent(search)}`);
       return res.ok ? res.json() : [];
-    }
+    },
+    enabled: search.trim().length > 0
   });
 
   const { data: chats } = useQuery<ChatListItem[]>({
@@ -38,11 +40,6 @@ export default function ChatsIndexPage() {
       return res.ok ? res.json() : [];
     }
   });
-
-  const filteredUsers = users?.filter(u => 
-    u.username.toLowerCase().includes(search.toLowerCase()) ||
-    u.display_name.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <DashboardLayout>
@@ -65,7 +62,7 @@ export default function ChatsIndexPage() {
 
           {search ? (
             <div className="space-y-3">
-              {filteredUsers?.map(user => (
+              {users?.map(user => (
                 <Link 
                   key={user.id}
                   href={`/chat/${user.username}`}

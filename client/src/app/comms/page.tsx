@@ -58,7 +58,10 @@ export default function CommsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: messageContent })
       });
-      if (!res.ok) throw new Error('Transmission failed');
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Transmission failed');
+        throw new Error(errText);
+      }
       return res.json();
     },
     onMutate: async (messageContent) => {
@@ -85,7 +88,7 @@ export default function CommsPage() {
         queryClient.setQueryData(['chat', activeChannel], context.previousMessages);
       }
       setContent(context?.messageContent || '');
-      toast.error('Transmission failed. Signal lost.');
+      toast.error(err instanceof Error ? err.message : 'Transmission failed. Signal lost.');
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['chat', activeChannel] });

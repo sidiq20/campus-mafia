@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from 'react';
-import { Skull, Mail, User, KeyRound, Building2, CheckCircle } from 'lucide-react';
+import { Skull, Mail, User, KeyRound, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { API_URL, setToken } from '@/lib/api';
 
 export default function SignupPage() {
@@ -11,16 +10,7 @@ export default function SignupPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  const [formData, setFormData] = useState({ display_name: '', username: '', email: '', faction_name: '', password: '' });
-
-  const { data: factions } = useQuery<{id: string, name: string}[]>({
-    queryKey: ['factions'],
-    queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/factions`);
-      if (!res.ok) throw new Error('Failed to load factions');
-      return res.json();
-    }
-  });
+  const [formData, setFormData] = useState({ display_name: '', username: '', email: '', password: '' });
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +29,7 @@ export default function SignupPage() {
         setToken(data.token);
         setSuccess(true);
         setTimeout(() => {
-          window.location.href = '/feed';
+          window.location.href = '/factions';
         }, 1200);
       } else {
         const err = await res.text();
@@ -129,24 +119,6 @@ export default function SignupPage() {
                 className="w-full bg-zinc-950/80 border border-zinc-800 rounded-lg pl-12 pr-4 py-3.5 text-sm focus:border-green-500/50 focus:bg-green-950/10 outline-none transition-all shadow-inner"
                 placeholder="alias@domain.com"
               />
-            </div>
-          </div>
-
-          <div className="group">
-            <label className="block text-[10px] font-bold text-green-500 uppercase tracking-widest mb-2 group-focus-within:text-green-400 transition-colors">Select Faction</label>
-            <div className="relative flex items-center">
-              <Building2 className="absolute left-4 w-4 h-4 text-zinc-500 group-focus-within:text-green-500 transition-colors" />
-              <select 
-                required
-                value={formData.faction_name}
-                onChange={e => setFormData({...formData, faction_name: e.target.value})}
-                className="w-full bg-zinc-950/80 border border-zinc-800 rounded-lg pl-12 pr-4 py-3.5 text-sm focus:border-green-500/50 focus:bg-green-950/10 outline-none transition-all appearance-none text-zinc-300 shadow-inner"
-              >
-                <option value="" disabled>Select Allegiance...</option>
-                {factions?.map((f) => (
-                  <option key={f.id} value={f.name}>{f.name}</option>
-                ))}
-              </select>
             </div>
           </div>
 

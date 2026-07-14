@@ -30,6 +30,19 @@ pub async fn create_comment(
     let pool = &state.pool;
     let user_id = auth_user.user_id;
 
+    // Rate limit: max 2 replies per minute, 1h ban on 3rd+ attempt (only for authenticated users)
+    if let Some(uid) = user_id {
+        match crate::rate_limit::check_and_record(pool, uid, crate::rate_limit::ACTION_REPLY).await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        {
+            crate::rate_limit::RateLimitResult::Allowed => {}
+            crate::rate_limit::RateLimitResult::Banned(until) => {
+                let remaining = (until - chrono::Utc::now()).num_seconds().max(0);
+                return Err((StatusCode::TOO_MANY_REQUESTS, format!("You have been temporarily banned from replying for {} more seconds. Slow down!", remaining)));
+            }
+        }
+    }
+
     let comment = sqlx::query_as::<_, CommentResponse>(
         r#"
         WITH inserted AS (

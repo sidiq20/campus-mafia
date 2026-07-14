@@ -45,6 +45,7 @@ struct PostResponse {
     user_id: Option<uuid::Uuid>,
     reply_count: Option<i64>,
     has_boosted: Option<bool>,
+    has_reposted: Option<bool>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -97,6 +98,7 @@ async fn create_post(
             i.user_id,
             0::bigint as reply_count,
             false as has_boosted,
+            false as has_reposted,
             i.created_at
         FROM inserted i
         LEFT JOIN users u ON i.user_id = u.id
@@ -169,6 +171,7 @@ async fn get_posts(
             p.user_id,
             (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as reply_count,
             EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has_boosted,
+            EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has_reposted,
             p.created_at
         FROM posts p
         LEFT JOIN users u ON p.user_id = u.id

@@ -22,6 +22,7 @@ type Post = {
   user_id: string | null;
   reply_count: number;
   has_boosted: boolean;
+  has_reposted: boolean;
   created_at: string;
 };
 
@@ -91,6 +92,7 @@ export default function Dashboard() {
           user_id: user?.id || null,
           reply_count: 0,
           has_boosted: false,
+          has_reposted: false,
           created_at: new Date().toISOString(),
         };
         return old ? [optimisticPost, ...old] : [optimisticPost];
@@ -350,10 +352,10 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           <button 
             onClick={() => !isAnonymousUser && repostMutation.mutate()}
             disabled={repostMutation.isPending}
-            className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-green-400 transition-colors disabled:opacity-50"
+            className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${post.has_reposted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
           >
-            <Repeat2 size={14} />
-            <span>Repost</span>
+            <Repeat2 size={14} className={post.has_reposted ? 'text-green-500' : ''} />
+            <span>{post.has_reposted ? 'Reposted' : 'Repost'}</span>
           </button>
           {isMine && (
             <button 

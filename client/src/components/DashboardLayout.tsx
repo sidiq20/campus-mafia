@@ -241,6 +241,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const text = latest.msg || latest.content || `${latest.type}${latest.author ? ' by @'+latest.author : latest.territory_name ? ' on '+latest.territory_name : ''}`;
         return text ? [text] : [];
       })()} />
+
+      {/* Bottom Navigation — Mobile Only */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-green-500/20 bg-black/95 backdrop-blur-lg">
+        <div className="flex items-center justify-around h-16 px-2">
+          <BottomNavItem
+            href="/feed"
+            icon={<Crosshair size={20} />}
+            label="Feed"
+            active={pathname === '/feed'}
+          />
+          <BottomNavItem
+            href="/chat"
+            icon={<MessageSquare size={20} />}
+            label="Chats"
+            active={pathname.startsWith('/chat')}
+            badge={dmUnread?.unread || 0}
+          />
+          {user?.faction_id ? (
+            <BottomNavItem
+              href={`/factions/${user.faction_id}`}
+              icon={<Shield size={20} />}
+              label="Syndicate"
+              active={pathname === `/factions/${user.faction_id}`}
+            />
+          ) : (
+            <BottomNavItem
+              href="/factions"
+              icon={<Shield size={20} />}
+              label="Factions"
+              active={pathname === '/factions'}
+            />
+          )}
+          <BottomNavItem
+            href="/notifications"
+            icon={<Bell size={20} />}
+            label="Alerts"
+            active={pathname === '/notifications'}
+            badge={notifications?.filter(n => !n.is_read).length || 0}
+          />
+          <BottomNavItem
+            href="/profile"
+            icon={<User size={20} />}
+            label="Profile"
+            active={pathname === '/profile'}
+          />
+        </div>
+      </nav>
     </div>
   );
 }
@@ -348,6 +395,30 @@ function NavItem({ icon, label, href, active = false, badge = 0 }: { icon: React
       <span className="flex-1">{label}</span>
       {badge > 0 && (
         <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>
+      )}
+    </Link>
+  );
+}
+
+function BottomNavItem({ icon, label, href, active = false, badge = 0 }: { icon: React.ReactNode, label: string, href: string, active?: boolean, badge?: number }) {
+  return (
+    <Link
+      href={href}
+      className={`relative flex flex-col items-center justify-center gap-0.5 w-16 h-full transition-colors ${active ? 'text-green-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+    >
+      <div className={`relative ${active ? 'drop-shadow-[0_0_6px_rgba(0,255,65,0.5)]' : ''}`}>
+        {icon}
+        {badge > 0 && (
+          <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] font-bold min-w-[16px] h-4 flex items-center justify-center px-1 rounded-full shadow-[0_0_8px_rgba(255,0,0,0.5)]">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+      </div>
+      <span className={`text-[9px] font-bold uppercase tracking-widest ${active ? 'text-green-400' : 'text-zinc-600'}`}>
+        {label}
+      </span>
+      {active && (
+        <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-green-500 rounded-full shadow-[0_0_6px_rgba(0,255,65,0.6)]" />
       )}
     </Link>
   );

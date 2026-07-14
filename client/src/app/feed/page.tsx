@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from 'react';
-import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search, User, Hash } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
@@ -35,12 +35,43 @@ type Comment = {
   created_at: string;
 };
 
+type UserSearchResult = {
+  id: string;
+  username: string;
+  display_name: string;
+};
+
 export default function Dashboard() {
   const queryClient = useQueryClient();
   const { user } = useUser();
   const [content, setContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: searchUsers, isFetching: isSearchLoading } = useQuery<UserSearchResult[]>({
+    queryKey: ['feed-search-users', searchQuery],
+    queryFn: async () => {
+      if (!searchQuery.trim()) return [];
+      const res = await apiFetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
+      return res.ok ? res.json() : [];
+    },
+    staleTime: 15_000,
+    enabled: searchQuery.trim().length > 0,
+  });
+
+  // Close search dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSearchDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const { data: posts, isLoading, refetch } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -52,10 +83,12 @@ export default function Dashboard() {
     staleTime: 10_000,
   });
 
-  const filteredPosts = posts?.filter(post => 
-    post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    post.author_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredPosts = searchQuery.trim()
+    ? posts?.filter(post => 
+        post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        post.author_name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : posts;
 
   const mutation = useMutation({
     mutationFn: async (newPost: { content: string, is_anonymous: boolean }) => {
@@ -130,13 +163,91 @@ export default function Dashboard() {
     <DashboardLayout>
       <header className="h-16 border-b border-green-500/30 flex items-center justify-between px-8 bg-black/60 backdrop-blur-md">
         <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text">Global Feed // Live</h2>
-        <input 
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search broadcasts..."
-          className="bg-zinc-900 border border-zinc-800 rounded px-4 py-1.5 text-xs outline-none focus:border-green-500/50 text-zinc-200 w-64"
-        />
+        <div ref={searchRef} className="relative">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+            <input 
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (e.target.value.trim()) setShowSearchDropdown(true);
+              }}
+              onFocus={() => { if (searchQuery.trim()) setShowSearchDropdown(true); }}
+              placeholder="Search intel, operatives..."
+              className="bg-zinc-900 border border-zinc-800 rounded pl-9 pr-4 py-1.5 text-xs outline-none focus:border-green-500/50 text-zinc-200 w-64"
+            />
+          </div>
+
+          {/* Search Dropdown */}
+          {showSearchDropdown && searchQuery.trim() && (
+            <div className="absolute top-full mt-1 right-0 w-80 sm:w-96 bg-black border border-zinc-800 rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.8)] z-50 max-h-96 overflow-y-auto">
+              {/* Users Section */}
+              {searchUsers && searchUsers.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 text-[9px] font-bold text-zinc-600 uppercase tracking-widest border-b border-zinc-800/50 flex items-center gap-2">
+                    <User size={10} /> Operatives
+                  </div>
+                  {searchUsers.slice(0, 5).map(u => (
+                    <Link
+                      key={u.id}
+                      href={`/profile/${u.username}`}
+                      onClick={() => { setShowSearchDropdown(false); setSearchQuery(''); }}
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-900/80 transition-colors border-b border-zinc-800/30 last:border-0"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                        <User size={12} className="text-zinc-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="block text-xs font-bold text-zinc-200 truncate">{u.display_name}</span>
+                        <span className="text-[10px] text-zinc-500 truncate">@{u.username}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {/* Posts Section */}
+              {filteredPosts && filteredPosts.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 text-[9px] font-bold text-zinc-600 uppercase tracking-widest border-b border-zinc-800/50 flex items-center gap-2">
+                    <Hash size={10} /> Intel Reports
+                  </div>
+                  {filteredPosts.slice(0, 5).map(p => (
+                    <div
+                      key={p.id}
+                      onClick={() => { setShowSearchDropdown(false); }}
+                      className="px-4 py-2.5 hover:bg-zinc-900/80 transition-colors border-b border-zinc-800/30 last:border-0 cursor-pointer"
+                    >
+                      <div className="text-[10px] text-zinc-500 truncate mb-0.5">
+                        {p.is_anonymous ? 'Anonymous' : `@${p.author_name}`}
+                        <span className="mx-1.5 text-zinc-700">·</span>
+                        {p.created_at ? new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}
+                      </div>
+                      <p className="text-xs text-zinc-300 truncate">{p.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Loading state */}
+              {isSearchLoading && (
+                <div className="px-4 py-6 text-center">
+                  <p className="text-[10px] text-green-500/60 animate-pulse uppercase tracking-widest">Scanning frequencies...</p>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!isSearchLoading && (!searchUsers || searchUsers.length === 0) && (!filteredPosts || filteredPosts.length === 0) && (
+                <div className="px-4 py-8 text-center">
+                  <p className="text-xs text-zinc-600">No operatives or intel found</p>
+                  <p className="text-[10px] text-zinc-700 mt-1">Try a different search term</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </header>
       
       <PullToRefresh onRefresh={refetch} className="flex-1">

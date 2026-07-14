@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import Link from 'next/link';
@@ -22,8 +22,21 @@ type ChatListItem = {
 };
 
 export default function ChatsIndexPage() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   
+  const prefetchChat = useCallback((username: string) => {
+    queryClient.prefetchQuery({
+      queryKey: ['chat', username],
+      queryFn: async () => {
+        const res = await apiFetch(`/api/chat/direct/${username}`);
+        if (!res.ok) throw new Error('Failed to fetch messages');
+        return res.json();
+      },
+      staleTime: 10_000,
+    });
+  }, [queryClient]);
+
   const { data: users } = useQuery<UserData[]>({
     queryKey: ['users', search],
     queryFn: async () => {
@@ -69,6 +82,7 @@ export default function ChatsIndexPage() {
                 <Link 
                   key={user.id}
                   href={`/chat/${user.username}`}
+                  onPointerEnter={() => prefetchChat(user.username)}
                   className="flex items-center justify-between p-4 bg-black/60 border border-zinc-800 rounded-lg hover:border-green-500/30 transition-colors"
                 >
                   <div className="flex items-center gap-3">
@@ -90,6 +104,7 @@ export default function ChatsIndexPage() {
                 <Link 
                   key={chat.username}
                   href={`/chat/${chat.username}`}
+                  onPointerEnter={() => prefetchChat(chat.username)}
                   className="block p-4 bg-black/60 border border-zinc-800 rounded-lg hover:border-green-500/30 transition-colors"
                 >
                   <div className="flex justify-between items-start mb-1">

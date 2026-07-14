@@ -156,25 +156,27 @@ export default function Dashboard() {
               rows={3}
             ></textarea>
             <div className="flex justify-between items-center mt-4 border-t border-zinc-800 pt-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <BroadcastCooldown />
-                <span className="text-[10px] text-zinc-500 uppercase tracking-widest"><TrendingUp size={10} className="inline mr-1" />+10 INF Reward</span>
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-widest" title="+10 INF Reward"><TrendingUp size={10} className="inline mr-1" /><span className="hidden sm:inline">+10 INF Reward</span></span>
+                <label className="flex items-center gap-1 sm:gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors" title="Incognito">
                   <input 
                     type="checkbox" 
                     checked={isAnonymous} 
                     onChange={(e) => setIsAnonymous(e.target.checked)} 
                     className="accent-green-500"
                   />
-                  <ShieldAlert size={14} /> Incognito
+                  <ShieldAlert size={14} /> <span className="hidden sm:inline">Incognito</span>
                 </label>
               </div>
               <button 
                 onClick={handleBroadcast}
                 disabled={mutation.isPending || !content.trim()}
-                className="px-6 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all duration-300 disabled:opacity-50"
+                title="Broadcast"
+                className="px-3 sm:px-6 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all duration-300 disabled:opacity-50"
               >
-                {mutation.isPending ? 'Transmitting...' : 'Broadcast'}
+                {mutation.isPending ? '...' : '📡'}
+                <span className="hidden sm:inline ml-1">{mutation.isPending ? 'Transmitting...' : 'Broadcast'}</span>
               </button>
             </div>
           </div>

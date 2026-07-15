@@ -5,11 +5,12 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
-import { User, Shield, Zap, Target, AlertTriangle, Radio, MessageSquare, Pin } from 'lucide-react';
+import { User, Shield, Zap, Target, AlertTriangle, Radio, MessageSquare, Pin, Send, Loader2, X } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
+import { useState } from 'react';
 
 // Shared Post type for profile card
 type Post = {
@@ -30,6 +31,33 @@ type Post = {
 export default function UserProfilePage() {
   const params = useParams();
   const username = params.username as string;
+  const { user: localUser } = useUser();
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const queryClient = useQueryClient();
+
+  const transferMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const res = await apiFetch('/api/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiver_username: username, amount }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || 'Transfer failed');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success(`Sent ${transferAmount} INF to @${username}`);
+      setShowTransfer(false);
+      setTransferAmount('');
+      queryClient.invalidateQueries({ queryKey: ['user', username] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   const { data: user, isLoading, error } = useQuery({
     queryKey: ['user', username],
@@ -90,12 +118,22 @@ export default function UserProfilePage() {
 
               <div className="flex flex-col gap-2">
                 <RankBadgeFull rank={user.rank} influence={user.influence} />
-                <Link 
-                  href={`/chat/${username}`} 
-                  className="px-4 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 text-center"
-                >
-                  Message
-                </Link>
+                <div className="flex flex-col gap-2">
+                  <Link 
+                    href={`/chat/${username}`} 
+                    className="px-4 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 text-center"
+                  >
+                    Message
+                  </Link>
+                  {localUser && localUser.username !== username && (
+                    <button
+                      onClick={() => setShowTransfer(true)}
+                      className="px-4 py-2 bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 rounded text-xs font-bold uppercase tracking-widest hover:bg-yellow-500/20 text-center flex items-center justify-center gap-1.5"
+                    >
+                      <Send size={12} /> Send INF
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -129,6 +167,69 @@ export default function UserProfilePage() {
 
           {/* Their Broadcasts */}
           <OtherUserPostsSection username={username} />
+
+          {/* INF Transfer Modal */}
+          {showTransfer && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowTransfer(false)}>
+              <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
+              <div
+                className="relative bg-zinc-950 border border-zinc-800 rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.8)] max-w-sm w-full p-6 animate-fade-in"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-widest flex items-center gap-2">
+                    <Send size={14} className="text-yellow-400" /> Send INF
+                  </h3>
+                  <button onClick={() => setShowTransfer(false)} className="text-zinc-600 hover:text-zinc-400">
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <p className="text-[10px] text-zinc-500 mb-4">
+                  Send INF to <span className="text-yellow-400 font-bold">@{username}</span>.
+                  They will receive the full amount instantly.
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 block">Amount (INF)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={transferAmount}
+                      onChange={e => setTransferAmount(e.target.value)}
+                      placeholder="Enter amount..."
+                      className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-sm outline-none focus:border-yellow-500/50 text-zinc-200 placeholder-zinc-600"
+                    />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowTransfer(false)}
+                      className="flex-1 py-3 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-bold text-zinc-400 hover:text-zinc-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        const amount = parseInt(transferAmount);
+                        if (isNaN(amount) || amount <= 0) {
+                          toast.error('Enter a valid amount');
+                          return;
+                        }
+                        transferMutation.mutate(amount);
+                      }}
+                      disabled={!transferAmount || parseInt(transferAmount) <= 0 || transferMutation.isPending}
+                      className="flex-1 py-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-xs font-bold text-yellow-400 hover:bg-yellow-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {transferMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                      Send {transferAmount ? `${parseInt(transferAmount)} INF` : ''}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </div>

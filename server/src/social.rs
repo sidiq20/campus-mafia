@@ -7,6 +7,107 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ServerState, auth::{AuthUser, OptionalAuthUser}, rank};
 
+// ─── INF Transfer ───
+
+#[derive(Deserialize)]
+pub struct TransferRequest {
+    pub receiver_username: String,
+    pub amount: i32,
+}
+
+pub async fn transfer_inf(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Json(payload): Json<TransferRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let sender_id = auth_user.user_id;
+
+    if payload.amount <= 0 {
+        return Err((StatusCode::BAD_REQUEST, "Amount must be positive".to_string()));
+    }
+
+    // Find receiver
+    let receiver_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM users WHERE username = $1"
+    )
+    .bind(&payload.receiver_username)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::BAD_REQUEST, "User not found".to_string()))?;
+
+    if receiver_id == sender_id {
+        return Err((StatusCode::BAD_REQUEST, "Cannot transfer INF to yourself".to_string()));
+    }
+
+    let mut tx = pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Check sender balance WITHIN transaction — lock row to prevent race conditions
+    let sender_inf: i32 = sqlx::query_scalar("SELECT influence FROM users WHERE id = $1 FOR UPDATE")
+        .bind(sender_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .flatten()
+        .unwrap_or(0);
+
+    if sender_inf < payload.amount {
+        return Err((StatusCode::BAD_REQUEST, format!("Not enough INF. You have {}, need {}", sender_inf, payload.amount)));
+    }
+
+    // Deduct from sender
+    sqlx::query("UPDATE users SET influence = influence - $1 WHERE id = $2")
+        .bind(payload.amount)
+        .bind(sender_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Add to receiver
+    sqlx::query("UPDATE users SET influence = influence + $1 WHERE id = $2")
+        .bind(payload.amount)
+        .bind(receiver_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Get sender name for notification
+    let sender_name: String = sqlx::query_scalar("SELECT COALESCE(display_name, username) FROM users WHERE id = $1")
+        .bind(sender_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|_| "Unknown".to_string());
+
+    // Notify receiver
+    let _ = sqlx::query(
+        "INSERT INTO notifications (user_id, content) VALUES ($1, $2)"
+    )
+    .bind(receiver_id)
+    .bind(format!("💰 Received {} INF from @{}", payload.amount, sender_name))
+    .execute(pool)
+    .await;
+
+    let _ = crate::push::notify_user(pool, receiver_id).await;
+
+    // Check titles
+    let _ = crate::titles::check_rank_titles(pool, sender_id, sender_inf - payload.amount).await;
+    if let Ok(Some(receiver_inf)) = sqlx::query_scalar::<_, i32>("SELECT influence FROM users WHERE id = $1")
+        .bind(receiver_id)
+        .fetch_optional(pool).await
+    {
+        let _ = crate::titles::check_rank_titles(pool, receiver_id, receiver_inf).await;
+    }
+
+    Ok(Json(serde_json::json!({
+        "status": "success",
+        "amount": payload.amount,
+        "receiver_username": payload.receiver_username
+    })))
+}
+
 #[derive(Serialize, sqlx::FromRow)]
 pub struct CommentResponse {
     pub id: uuid::Uuid,

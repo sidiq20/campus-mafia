@@ -417,9 +417,18 @@ async fn main() {
     tracing::info!("Connecting to database...");
 
     let pool = match PgPoolOptions::new()
-        .max_connections(25)
-        .acquire_timeout(std::time::Duration::from_secs(5))
-        .idle_timeout(std::time::Duration::from_secs(300))
+        .max_connections(10)          // Reduced from 25 — container only has 512MB RAM
+        .min_connections(1)           // Keep 1 warm connection always alive
+        .acquire_timeout(std::time::Duration::from_secs(10))  // Give more time to reconnect
+        .idle_timeout(std::time::Duration::from_secs(60 * 5)) // 5 min idle timeout
+        .max_lifetime(std::time::Duration::from_secs(60 * 30)) // Recycle connections every 30 min
+        .after_connect(|conn, _meta| {
+            Box::pin(async move {
+                // Test the connection is alive right after acquiring
+                sqlx::query("SELECT 1").execute(conn).await?;
+                Ok(())
+            })
+        })
         .connect(&database_url)
         .await
     {

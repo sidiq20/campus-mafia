@@ -488,8 +488,10 @@ async fn main() {
         .route("/api/profile/broadcasts", get(auth::get_profile_broadcasts))
         .route("/api/profile/boosted", get(auth::get_boosted_posts))
 
-        // Social
+        // Social — Leaderboards
         .route("/api/leaderboard", get(social::get_leaderboard))
+        .route("/api/leaderboard/factions", get(social::get_faction_leaderboard))
+        .route("/api/leaderboard/raiders", get(social::get_top_raiders))
         
         // Pin / Repost
         .route("/api/posts/:id/pin", axum::routing::post(auth::pin_post))

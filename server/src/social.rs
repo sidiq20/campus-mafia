@@ -237,6 +237,126 @@ pub async fn add_reaction(
     Ok(Json(serde_json::json!({"status": "success"})))
 }
 
+// ─── Faction Leaderboard ───
+
+#[derive(Serialize)]
+pub struct LeaderboardFaction {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub influence: i32,
+    pub member_count: i64,
+    pub territory_count: i64,
+}
+
+pub async fn get_faction_leaderboard(
+    State(state): State<ServerState>,
+) -> Json<Vec<LeaderboardFaction>> {
+    let pool = &state.pool;
+
+    #[derive(sqlx::FromRow)]
+    struct FactionRow {
+        id: uuid::Uuid,
+        name: String,
+        influence: i32,
+        member_count: i64,
+        territory_count: i64,
+    }
+
+    let rows = sqlx::query_as::<_, FactionRow>(
+        r#"
+        SELECT 
+            f.id,
+            f.name,
+            COALESCE(f.influence, 0) as influence,
+            COALESCE(mc.c, 0) as member_count,
+            COALESCE(tc.c, 0) as territory_count
+        FROM factions f
+        LEFT JOIN LATERAL (SELECT COUNT(*) as c FROM users u WHERE u.faction_id = f.id) mc ON true
+        LEFT JOIN LATERAL (SELECT COUNT(*) as c FROM territories t WHERE t.controlling_faction_id = f.id) tc ON true
+        ORDER BY f.influence DESC
+        LIMIT 10
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let factions: Vec<LeaderboardFaction> = rows.into_iter().map(|r| LeaderboardFaction {
+        id: r.id,
+        name: r.name,
+        influence: r.influence,
+        member_count: r.member_count,
+        territory_count: r.territory_count,
+    }).collect();
+
+    Json(factions)
+}
+
+// ─── Top Raiders Leaderboard ───
+
+#[derive(Serialize)]
+pub struct LeaderboardRaider {
+    pub id: uuid::Uuid,
+    pub username: String,
+    pub display_name: String,
+    pub faction_name: Option<String>,
+    pub total_influence_committed: i64,
+    pub raid_count: i64,
+}
+
+pub async fn get_top_raiders(
+    State(state): State<ServerState>,
+) -> Json<Vec<LeaderboardRaider>> {
+    let pool = &state.pool;
+
+    #[derive(sqlx::FromRow)]
+    struct RaiderRow {
+        id: uuid::Uuid,
+        username: String,
+        display_name: String,
+        faction_name: Option<String>,
+        total_influence_committed: i64,
+        raid_count: i64,
+    }
+
+    let rows = sqlx::query_as::<_, RaiderRow>(
+        r#"
+        SELECT 
+            u.id,
+            u.username,
+            u.display_name,
+            f.name as faction_name,
+            COALESCE(rp_stats.total_inf, 0) as total_influence_committed,
+            COALESCE(rp_stats.raid_count, 0) as raid_count
+        FROM users u
+        LEFT JOIN factions f ON u.faction_id = f.id
+        LEFT JOIN LATERAL (
+            SELECT 
+                SUM(rp2.influence_committed) as total_inf,
+                COUNT(DISTINCT rp2.raid_id) as raid_count
+            FROM raid_participants rp2
+            WHERE rp2.user_id = u.id
+        ) rp_stats ON true
+        ORDER BY rp_stats.total_inf DESC NULLS LAST
+        LIMIT 10
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let raiders: Vec<LeaderboardRaider> = rows.into_iter().map(|r| LeaderboardRaider {
+        id: r.id,
+        username: r.username,
+        display_name: r.display_name,
+        faction_name: r.faction_name,
+        total_influence_committed: r.total_influence_committed,
+        raid_count: r.raid_count,
+    }).collect();
+
+    Json(raiders)
+}
+
 #[derive(Serialize)]
 pub struct LeaderboardUser {
     pub id: uuid::Uuid,

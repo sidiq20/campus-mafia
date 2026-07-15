@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, User, Zap, MessageSquare, Repeat2, ArrowLeft, Hash, Clock, X } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -35,7 +36,21 @@ type UserSearchResult = {
   display_name: string;
 };
 
-export default function SearchPage() {
+export default function SearchPageWrapper() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex-1 flex items-center justify-center text-green-500 animate-pulse text-sm">
+          Loading search...
+        </div>
+      </DashboardLayout>
+    }>
+      <SearchPageContent />
+    </Suspense>
+  );
+}
+
+function SearchPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const query = searchParams.get('q') || '';

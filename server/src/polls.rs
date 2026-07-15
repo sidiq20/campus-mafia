@@ -6,15 +6,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use crate::{ServerState, auth::{AuthUser, OptionalAuthUser}};
 
-#[derive(Serialize, sqlx::FromRow)]
-pub struct PollResponse {
-    pub id: uuid::Uuid,
-    pub post_id: uuid::Uuid,
-    pub question: String,
-    pub expires_at: chrono::DateTime<chrono::Utc>,
-    pub options: serde_json::Value, // JSON array of {id, label, vote_count, voted_by_me}
-}
-
 #[derive(Deserialize)]
 pub struct CreatePollRequest {
     pub post_id: uuid::Uuid,

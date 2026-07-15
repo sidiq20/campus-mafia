@@ -29,6 +29,7 @@ mod cache;
 mod group_chats;
 mod polls;
 mod bounties;
+mod sync;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -612,6 +613,9 @@ async fn main() {
         .route("/api/groups/:id/members/:user_id/remove", axum::routing::post(group_chats::remove_group_member))
         .route("/api/groups/:id/members/:user_id/promote", axum::routing::post(group_chats::promote_to_admin))
         .route("/api/groups/:id/messages", axum::routing::post(group_chats::send_group_message).get(group_chats::get_group_messages))
+
+        // Multi-device Sync
+        .route("/api/sync", get(sync::sync_data))
 
         // Activity
         .route("/api/activity/recent", get(crate::game::get_recent_activity))

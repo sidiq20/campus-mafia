@@ -10,6 +10,8 @@ import { Toaster, toast } from 'sonner';
 import PwaInstallBanner from './PwaInstallBanner';
 import PetCat from './PetCat';
 import P2PScanAnimation from './P2PScanAnimation';
+import OnboardingWalkthrough from './OnboardingWalkthrough';
+import AccentThemePicker from './AccentThemePicker';
 import { WS_URL, clearToken, apiFetch } from '@/lib/api';
 import { p2pManager } from '@/lib/offline';
 
@@ -285,6 +287,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <LogOut size={14} />
                 Disconnect
               </button>
+              <div className="mt-3 flex items-center justify-center">
+                <AccentThemePicker />
+              </div>
             </>
           ) : (
             <Link href="/login" className="w-full text-center py-2 bg-green-500/10 text-green-500 border border-green-500/30 rounded text-xs uppercase font-bold">Login</Link>
@@ -318,6 +323,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </aside>
+      <OnboardingWalkthrough />
       <PwaInstallBanner />
       <PetCat recentActivity={(() => {
         const latest = messages[messages.length - 1];

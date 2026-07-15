@@ -9,6 +9,7 @@ import { Search, User, MessageSquare, Users, Plus, X, UserPlus, Radio } from 'lu
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { p2pManager } from '@/lib/offline';
+import P2PScanAnimation from '@/components/P2PScanAnimation';
 
 type UserData = {
   id: string;
@@ -231,28 +232,46 @@ export default function ChatsIndexPage() {
           </div>
 
           {/* Local P2P Network */}
-          {p2pPeers.length > 0 && !search && (
+          {!search && (
             <div>
               <h3 className="text-xs font-bold text-green-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <Radio size={14} className="text-green-400" />
                 <span>Local Network</span>
-                <span className="relative w-2 h-2 ml-1">
-                  <span className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-60" />
-                  <span className="absolute inset-0 bg-green-500 rounded-full" />
-                </span>
+                {p2pPeers.length > 0 && (
+                  <span className="relative w-2 h-2 ml-1">
+                    <span className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-60" />
+                    <span className="absolute inset-0 bg-green-500 rounded-full" />
+                  </span>
+                )}
               </h3>
-              <Link
-                href="/chat/local"
-                className="flex items-center gap-3 p-4 bg-black/60 border border-green-500/20 rounded-lg hover:border-green-500/40 transition-all group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-green-500/10 border border-green-500/30 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_10px_rgba(34,197,94,0.3)] transition-shadow">
-                  <Radio size={14} className="text-green-400" />
+              
+              {/* Peers connected — show chat link */}
+              {p2pPeers.length > 0 ? (
+                <Link
+                  href="/chat/local"
+                  className="flex items-center gap-3 p-4 bg-black/60 border border-green-500/20 rounded-lg hover:border-green-500/40 transition-all group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-green-500/10 border border-green-500/30 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_10px_rgba(34,197,94,0.3)] transition-shadow">
+                    <Radio size={14} className="text-green-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm text-green-400 truncate">Local Area Chat</div>
+                    <div className="text-[10px] text-zinc-500">{p2pPeers.length} peer{p2pPeers.length > 1 ? 's' : ''} nearby · P2P encrypted</div>
+                  </div>
+                </Link>
+              ) : (
+                /* Scanning animation when no peers yet */
+                <div className="flex items-center gap-4 p-4 bg-black/60 border border-zinc-800 rounded-lg">
+                  <P2PScanAnimation active={true} peerCount={0} size="md" />
+                  <div>
+                    <div className="text-sm font-bold text-zinc-500">Local Area Chat</div>
+                    <div className="text-[10px] text-zinc-600 flex items-center gap-1.5 mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-yellow-600 animate-pulse inline-block" />
+                      Scanning for nearby operatives...
+                    </div>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm text-green-400 truncate">Local Area Chat</div>
-                  <div className="text-[10px] text-zinc-500">{p2pPeers.length} peer{p2pPeers.length > 1 ? 's' : ''} nearby · P2P encrypted</div>
-                </div>
-              </Link>
+              )}
             </div>
           )}
 

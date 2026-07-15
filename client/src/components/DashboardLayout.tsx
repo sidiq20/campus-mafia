@@ -9,6 +9,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Toaster, toast } from 'sonner';
 import PwaInstallBanner from './PwaInstallBanner';
 import PetCat from './PetCat';
+import P2PScanAnimation from './P2PScanAnimation';
 import { WS_URL, clearToken, apiFetch } from '@/lib/api';
 import { p2pManager } from '@/lib/offline';
 
@@ -240,16 +241,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
         </div>
 
-        {/* P2P Status Indicator */}
-        {user && p2pPeers.length > 0 && (
-          <div className="px-4 py-2 border border-green-500/20 rounded bg-green-500/5 flex items-center gap-2">
-            <span className="relative w-2 h-2">
-              <span className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-60" />
-              <span className="absolute inset-0 bg-green-500 rounded-full" />
-            </span>
-            <span className="text-[9px] text-green-400 uppercase tracking-widest font-bold">
-              P2P · {p2pPeers.length} peer{p2pPeers.length > 1 ? 's' : ''}
-            </span>
+        {/* P2P Status Indicator with Scan Animation */}
+        {user && (
+          <div className="px-3 py-2 border border-zinc-800 rounded bg-zinc-950/50 flex items-center gap-2 group hover:border-green-500/20 transition-all">
+            <P2PScanAnimation active={p2pPeers.length > 0 || true} peerCount={p2pPeers.length} size="sm" />
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">P2P Network</div>
+              <div className="text-[8px] text-zinc-600 flex items-center gap-1">
+                {p2pPeers.length > 0 ? (
+                  <>
+                    <span className="text-green-400">{p2pPeers.length} peer{p2pPeers.length > 1 ? 's' : ''}</span>
+                    <span className="text-zinc-700">·</span>
+                    <span className="text-green-500/60">connected</span>
+                  </>
+                ) : (
+                  <span className="text-yellow-600/60 animate-pulse">scanning...</span>
+                )}
+              </div>
+            </div>
+            {p2pPeers.length > 0 && (
+              <span className="relative w-2 h-2 shrink-0">
+                <span className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-60" />
+                <span className="absolute inset-0 bg-green-500 rounded-full" />
+              </span>
+            )}
           </div>
         )}
 

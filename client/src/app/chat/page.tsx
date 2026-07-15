@@ -139,6 +139,17 @@ export default function ChatsIndexPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Online status — poll connected users
+  const { data: onlineUsers = [] } = useQuery<string[]>({
+    queryKey: ['online-users'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/users/online');
+      return res.ok ? res.json() : [];
+    },
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+
   return (
     <DashboardLayout>
       <header className="h-16 border-b border-green-500/30 flex items-center px-4 sm:px-8 bg-black/60 backdrop-blur-md">
@@ -326,29 +337,41 @@ export default function ChatsIndexPage() {
           ) : (
             <div className="space-y-3">
               <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Recent Conversations</h3>
-              {chats?.map(chat => (
-                <Link 
-                  key={chat.username}
-                  href={`/chat/${chat.username}`}
-                  onPointerEnter={() => prefetchChat(chat.username)}
-                  className="block p-4 bg-black/60 border border-zinc-800 rounded-lg hover:border-green-500/30 transition-colors"
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Link href={`/profile/${chat.username}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-200 hover:text-green-400 truncate transition-colors">{chat.display_name}</Link>
-                      {chat.unread_count > 0 && (
-                        <span className="bg-green-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,255,65,0.4)]">
-                          {chat.unread_count}
-                        </span>
-                      )}
+              {chats?.map(chat => {
+                const isOnline = onlineUsers?.includes(chat.username) || false;
+                return (
+                  <Link 
+                    key={chat.username}
+                    href={`/chat/${chat.username}`}
+                    onPointerEnter={() => prefetchChat(chat.username)}
+                    className="block p-4 bg-black/60 border border-zinc-800 rounded-lg hover:border-green-500/30 transition-colors"
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* Online indicator dot */}
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            isOnline
+                              ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]'
+                              : 'bg-zinc-700'
+                          }`}
+                          title={isOnline ? 'Online' : 'Offline'}
+                        />
+                        <Link href={`/profile/${chat.username}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-200 hover:text-green-400 truncate transition-colors">{chat.display_name}</Link>
+                        {chat.unread_count > 0 && (
+                          <span className="bg-green-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,255,65,0.4)]">
+                            {chat.unread_count}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[9px] text-zinc-600 font-mono shrink-0">
+                        {new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
-                    <span className="text-[9px] text-zinc-600 font-mono shrink-0">
-                      {new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p className={`text-xs truncate ${chat.unread_count > 0 ? 'text-zinc-300 font-bold' : 'text-zinc-400'}`}>{chat.last_message}</p>
-                </Link>
-              ))}
+                    <p className={`text-xs truncate ${chat.unread_count > 0 ? 'text-zinc-300 font-bold' : 'text-zinc-400'}`}>{chat.last_message}</p>
+                  </Link>
+                );
+  })}
               {(!chats || chats.length === 0) && <p className="text-center text-zinc-700 py-8 italic">No recent chats.</p>}
             </div>
           )}

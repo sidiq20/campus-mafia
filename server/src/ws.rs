@@ -1,6 +1,7 @@
 use axum::{
     extract::{ws::{Message, WebSocket, WebSocketUpgrade}, State},
     response::Response,
+    Json,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use std::sync::Arc;
@@ -102,6 +103,12 @@ pub enum GameEvent {
 /// Map of username → sender for P2P signaling routing
 static P2P_CLIENTS: once_cell::sync::Lazy<Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<String>>>> =
     once_cell::sync::Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// Returns the list of currently online (P2P-connected) usernames
+pub async fn get_online_users() -> Json<Vec<String>> {
+    let clients = P2P_CLIENTS.lock().await;
+    Json(clients.keys().cloned().collect())
+}
 
 pub async fn p2p_ws_handler(
     ws: WebSocketUpgrade,

@@ -484,6 +484,7 @@ async fn main() {
         .route("/api/auth/username", axum::routing::put(auth::update_username))
         .route("/api/users/:username", get(auth::get_user_by_username))
         .route("/api/users/search", get(auth::search_users))
+        .route("/api/users/online", get(ws::get_online_users))
         .route("/api/profile/broadcasts", get(auth::get_profile_broadcasts))
         .route("/api/profile/boosted", get(auth::get_boosted_posts))
 

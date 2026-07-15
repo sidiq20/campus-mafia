@@ -38,6 +38,18 @@ export default function DirectChatPage() {
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
   const [otherTyping, setOtherTyping] = useState(false);
+
+  // Online status for this user
+  const { data: onlineUsers = [] } = useQuery<string[]>({
+    queryKey: ['online-users'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/users/online');
+      return res.ok ? res.json() : [];
+    },
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+  const isOnline = onlineUsers.includes(username);
   const [replyTo, setReplyTo] = useState<{ id: string; content: string } | null>(null);
   const [sendingLock, setSendingLock] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -238,7 +250,17 @@ export default function DirectChatPage() {
           <ArrowLeft size={20} />
         </Link>
         <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text truncate">Direct Channel // @{username}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text truncate">Direct Channel // @{username}</h2>
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                isOnline
+                  ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]'
+                  : 'bg-zinc-700'
+              }`}
+              title={isOnline ? 'Online' : 'Offline'}
+            />
+          </div>
           {otherTyping && (
             <p className="text-[10px] text-green-400/70 mt-0.5 animate-pulse flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: '0ms' }} />

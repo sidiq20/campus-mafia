@@ -27,6 +27,7 @@ export default function CommsPage() {
   const queryClient = useQueryClient();
   const [activeChannel, setActiveChannel] = useState<'global' | 'faction' | null>('global');
   const [content, setContent] = useState('');
+  const [sendingLock, setSendingLock] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom of chat
@@ -70,6 +71,7 @@ export default function CommsPage() {
       return res.json();
     },
     onMutate: async (messageContent) => {
+      setSendingLock(true);
       await queryClient.cancelQueries({ queryKey: ['chat', activeChannel] });
       const previousMessages = queryClient.getQueryData<ChatMessage[]>(['chat', activeChannel]);
       
@@ -94,13 +96,16 @@ export default function CommsPage() {
         queryClient.setQueryData(['chat', activeChannel], context.previousMessages);
       }
       setContent(context?.messageContent || '');
+      setSendingLock(false);
       toast.error(err instanceof Error ? err.message : 'Transmission failed. Signal lost.');
     },
     onSettled: () => {
+      setSendingLock(false);
       queryClient.invalidateQueries({ queryKey: ['chat', activeChannel] });
     },
     onSuccess: () => {
       setContent('');
+      setSendingLock(false);
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 50);
@@ -109,7 +114,7 @@ export default function CommsPage() {
 
   const handleSend = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!content.trim() || !activeChannel) return;
+    if (!content.trim() || !activeChannel || sendingLock || mutation.isPending) return;
     mutation.mutate(content);
   };
 

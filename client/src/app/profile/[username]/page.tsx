@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MentionText } from '@/components/MentionText';
@@ -171,6 +171,7 @@ function OtherUserPostsSection({ username }: { username: string }) {
 function OtherUserPostCard({ post }: { post: Post }) {
   const queryClient = useQueryClient();
   const { user: localUser } = useUser();
+  const router = useRouter();
 
   const boostMutation = useMutation({
     mutationFn: async () => {
@@ -187,21 +188,20 @@ function OtherUserPostCard({ post }: { post: Post }) {
     }
   });
 
-  const handleBoost = () => {
-    if (!localUser) {
-      toast.error('Login first');
-      return;
-    }
-    boostMutation.mutate();
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a')) return;
+    router.push(`/posts/${post.id}`);
   };
 
   return (
-    <div className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-all">
-      <Link href={`/posts/${post.id}`} className="block">
-        <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
-      </Link>
+    <div
+      onClick={handleCardClick}
+      className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-all cursor-pointer"
+    >
+      <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
       <div className="flex items-center gap-4 pt-3 border-t border-zinc-800/50">
-        <button onClick={handleBoost} disabled={boostMutation.isPending || post.has_boosted}
+        <button onClick={(e) => { e.stopPropagation(); if (!localUser) { toast.error('Login first'); return; } boostMutation.mutate(); }} disabled={boostMutation.isPending || post.has_boosted}
           className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}>
           <Zap size={12} className={post.has_boosted ? "fill-green-500" : ""} /> {post.has_boosted ? 'Boosted' : 'Boost'}
         </button>

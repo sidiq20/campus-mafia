@@ -12,6 +12,11 @@ export default function PwaInit() {
       (registration) => {
         console.log("Service Worker registered with scope:", registration.scope);
 
+        // Register background sync for offline messages (if supported)
+        if ('sync' in (registration as any)) {
+          (registration as any).sync.register('sync-messages').catch(() => {});
+        }
+
         // Request notification permission
         if ("Notification" in window && Notification.permission === "default") {
           Notification.requestPermission();

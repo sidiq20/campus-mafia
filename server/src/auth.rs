@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use axum_extra::extract::cookie::{Cookie, CookieJar};
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
 use serde::{Deserialize, Serialize};
@@ -98,6 +98,9 @@ pub async fn register(
 
     let token = create_jwt(user_id).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
+    // Set httpOnly cookie for persistent sessions across page loads / PWA restarts
+    let jar = add_jwt_cookie(jar, &token);
+
     // Send a welcome message in global comms
     crate::comms::send_welcome_message(
         pool,
@@ -149,10 +152,26 @@ pub async fn login(
 
     let token = create_jwt(record.id).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
+    // Set httpOnly cookie so the session survives localStorage clears on mobile/PWA
+    let jar = add_jwt_cookie(jar, &token);
+
     Ok((
         jar,
         Json(serde_json::json!({ "user_id": record.id, "username": payload.username, "token": token })),
     ))
+}
+
+/// Helper: build and add a JWT httpOnly cookie to the jar for persistent sessions.
+/// Max-Age matches the JWT expiry (7 days) so the cookie outlives browser restarts.
+fn add_jwt_cookie(jar: CookieJar, token: &str) -> CookieJar {
+    let cookie = Cookie::build(("jwt", token.to_owned()))
+        .path("/")
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::None)
+        .max_age(time::Duration::days(7))
+        .build();
+    jar.add(cookie)
 }
 
 pub async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
@@ -160,7 +179,7 @@ pub async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
         .path("/")
         .http_only(true)
         .secure(true)
-        .same_site(axum_extra::extract::cookie::SameSite::None)
+        .same_site(SameSite::None)
         .build();
     let jar = jar.add(cookie);
     (jar, Json(serde_json::json!({ "message": "Logged out" })))
@@ -418,6 +437,53 @@ pub async fn me(
 pub struct UpdateProfileRequest {
     pub display_name: Option<String>,
     pub bio: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateUsernameRequest {
+    pub username: String,
+}
+
+pub async fn update_username(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<UpdateUsernameRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let new_username = payload.username.trim().to_lowercase();
+
+    if new_username.len() < 3 {
+        return Err((StatusCode::BAD_REQUEST, "Username must be at least 3 characters".to_string()));
+    }
+    if new_username.len() > 30 {
+        return Err((StatusCode::BAD_REQUEST, "Username must be at most 30 characters".to_string()));
+    }
+    if !new_username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        return Err((StatusCode::BAD_REQUEST, "Username can only contain letters, numbers, underscores, and hyphens".to_string()));
+    }
+
+    // Check uniqueness
+    let existing: bool = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND id != $2)"
+    )
+    .bind(&new_username)
+    .bind(auth_user.user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if existing {
+        return Err((StatusCode::CONFLICT, "Username already taken".to_string()));
+    }
+
+    sqlx::query("UPDATE users SET username = $1 WHERE id = $2")
+        .bind(&new_username)
+        .bind(auth_user.user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({"status": "ok", "username": new_username})))
 }
 
 pub async fn update_profile(

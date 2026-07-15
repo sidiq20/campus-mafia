@@ -26,6 +26,7 @@ mod rate_limit;
 mod titles;
 mod push;
 mod cache;
+mod group_chats;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -291,41 +292,89 @@ async fn get_posts(
         _ => None,
     };
 
-    let posts = sqlx::query_as::<_, PostResponse>(
-        r#"
-        SELECT 
-            p.id, 
-            p.content, 
-            p.influence_earned, 
-            COALESCE(u.display_name, 'Anonymous') as author_name, 
-            u.username as author_username,
-            f.name as faction_name,
-            p.is_anonymous,
-            p.user_id,
-            COALESCE(c.cnt, 0) as reply_count,
-            COALESCE(b.cnt, 0) as boost_count,
-            COALESCE(rp.cnt, 0) as repost_count,
-            COALESCE(hb.has, false) as has_boosted,
-            COALESCE(hr.has, false) as has_reposted,
-            p.created_at
-        FROM posts p
-        LEFT JOIN users u ON p.user_id = u.id
-        LEFT JOIN factions f ON u.faction_id = f.id
-        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM comments c WHERE c.post_id = p.id) c ON true
-        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') b ON true
-        LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reposts rp WHERE rp.post_id = p.id) rp ON true
-        LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has) hb ON true
-        LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has) hr ON true
-        WHERE ($2::uuid IS NULL OR p.user_id = $2)
-        ORDER BY p.created_at DESC
-        LIMIT 50
-        "#
-    )
-    .bind(user_id)
-    .bind(target_user_id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_else(|_| vec![]);
+    // Support q=search query to filter by content text
+    let search_query = params.get("q").map(|s| s.clone());
+
+    let posts = if let Some(ref q) = search_query {
+        if q.trim().is_empty() {
+            vec![]
+        } else {
+            let pattern = format!("%{}%", q);
+            sqlx::query_as::<_, PostResponse>(
+                r#"
+                SELECT 
+                    p.id, 
+                    p.content, 
+                    p.influence_earned, 
+                    COALESCE(u.display_name, 'Anonymous') as author_name, 
+                    u.username as author_username,
+                    f.name as faction_name,
+                    p.is_anonymous,
+                    p.user_id,
+                    COALESCE(c.cnt, 0) as reply_count,
+                    COALESCE(b.cnt, 0) as boost_count,
+                    COALESCE(rp.cnt, 0) as repost_count,
+                    COALESCE(hb.has, false) as has_boosted,
+                    COALESCE(hr.has, false) as has_reposted,
+                    p.created_at
+                FROM posts p
+                LEFT JOIN users u ON p.user_id = u.id
+                LEFT JOIN factions f ON u.faction_id = f.id
+                LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM comments c WHERE c.post_id = p.id) c ON true
+                LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') b ON true
+                LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reposts rp WHERE rp.post_id = p.id) rp ON true
+                LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has) hb ON true
+                LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has) hr ON true
+                WHERE ($2::uuid IS NULL OR p.user_id = $2)
+                  AND p.content ILIKE $3
+                ORDER BY p.created_at DESC
+                LIMIT 50
+                "#
+            )
+            .bind(user_id)
+            .bind(target_user_id)
+            .bind(&pattern)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_else(|_| vec![])
+        }
+    } else {
+        sqlx::query_as::<_, PostResponse>(
+            r#"
+            SELECT 
+                p.id, 
+                p.content, 
+                p.influence_earned, 
+                COALESCE(u.display_name, 'Anonymous') as author_name, 
+                u.username as author_username,
+                f.name as faction_name,
+                p.is_anonymous,
+                p.user_id,
+                COALESCE(c.cnt, 0) as reply_count,
+                COALESCE(b.cnt, 0) as boost_count,
+                COALESCE(rp.cnt, 0) as repost_count,
+                COALESCE(hb.has, false) as has_boosted,
+                COALESCE(hr.has, false) as has_reposted,
+                p.created_at
+            FROM posts p
+            LEFT JOIN users u ON p.user_id = u.id
+            LEFT JOIN factions f ON u.faction_id = f.id
+            LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM comments c WHERE c.post_id = p.id) c ON true
+            LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') b ON true
+            LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reposts rp WHERE rp.post_id = p.id) rp ON true
+            LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has) hb ON true
+            LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has) hr ON true
+            WHERE ($2::uuid IS NULL OR p.user_id = $2)
+            ORDER BY p.created_at DESC
+            LIMIT 50
+            "#
+        )
+        .bind(user_id)
+        .bind(target_user_id)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_else(|_| vec![])
+    };
 
     Json(posts)
 }
@@ -432,6 +481,7 @@ async fn main() {
         .route("/api/auth/login", axum::routing::post(auth::login))
         .route("/api/auth/logout", axum::routing::post(auth::logout))
         .route("/api/auth/me", get(auth::me).put(auth::update_profile))
+        .route("/api/auth/username", axum::routing::put(auth::update_username))
         .route("/api/users/:username", get(auth::get_user_by_username))
         .route("/api/users/search", get(auth::search_users))
         .route("/api/profile/broadcasts", get(auth::get_profile_broadcasts))
@@ -539,6 +589,14 @@ async fn main() {
         .route("/api/raids/:id/join", axum::routing::post(game::join_raid))
         .route("/api/raids/:id/cancel", axum::routing::post(game::cancel_raid))
 
+        // Group Chats
+        .route("/api/groups", axum::routing::post(group_chats::create_group).get(group_chats::get_my_groups))
+        .route("/api/groups/:id/members", get(group_chats::get_group_members))
+        .route("/api/groups/:id/members/add", axum::routing::post(group_chats::add_group_member))
+        .route("/api/groups/:id/members/:user_id/remove", axum::routing::post(group_chats::remove_group_member))
+        .route("/api/groups/:id/members/:user_id/promote", axum::routing::post(group_chats::promote_to_admin))
+        .route("/api/groups/:id/messages", axum::routing::post(group_chats::send_group_message).get(group_chats::get_group_messages))
+
         // Activity
         .route("/api/activity/recent", get(crate::game::get_recent_activity))
 
@@ -549,6 +607,7 @@ async fn main() {
 
         // Websocket
         .route("/api/ws", get(ws::ws_handler))
+        .route("/api/ws/p2p", get(ws::p2p_ws_handler))
 
         .layer(cors)
         .layer(tower_http::compression::CompressionLayer::new())

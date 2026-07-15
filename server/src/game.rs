@@ -841,7 +841,25 @@ pub async fn plan_raid(
 
     tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Use the updated comms notification that accepts direct parameters
+    // Send WebSocket event
+    if let Ok(faction_name) = sqlx::query_scalar::<_, String>("SELECT name FROM factions WHERE id = $1")
+        .bind(user_faction)
+        .fetch_optional(pool)
+        .await
+        .map(|o| o.unwrap_or_default())
+    {
+        let ws_event = crate::ws::GameEvent::RaidPlanned {
+            faction_name,
+            target_territory: raid.target_territory_name.clone(),
+            planner_name: display_name.clone(),
+            influence_committed: payload.influence_commitment,
+        };
+        if let Ok(json) = serde_json::to_string(&ws_event) {
+            let _ = state.ws_state.tx.send(json);
+        }
+    }
+
+    // Faction channel notification
     let territory_name = &raid.target_territory_name;
     let msg = format!("📡 @{} has proposed a raid on **{}** with **{} INF**! Join the planning phase!", display_name, territory_name, payload.influence_commitment);
     let _ = crate::comms::send_faction_system_message(
@@ -971,6 +989,24 @@ pub async fn join_raid(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Send WebSocket event
+    if let Ok(faction_name) = sqlx::query_scalar::<_, String>("SELECT name FROM factions WHERE id = $1")
+        .bind(user_faction.unwrap())
+        .fetch_optional(pool)
+        .await
+        .map(|o| o.unwrap_or_default())
+    {
+        let ws_event = crate::ws::GameEvent::RaidJoined {
+            faction_name,
+            target_territory: raid_info.target_territory_name.clone().unwrap_or_default(),
+            joiner_name: display_name.clone(),
+            influence_committed: payload.influence_commitment,
+        };
+        if let Ok(json) = serde_json::to_string(&ws_event) {
+            let _ = state.ws_state.tx.send(json);
+        }
+    }
 
     // Notify faction channel
     let territory_name = raid_info.target_territory_name.as_deref().unwrap_or("Unknown");
@@ -1186,9 +1222,10 @@ async fn execute_expired_raids(pool: &sqlx::PgPool, faction_id: uuid::Uuid) -> R
 
         tx.commit().await?;
 
-        // Send faction notification after transaction completes
         let tname = territory_name.as_deref().unwrap_or("Unknown");
         let fname = raid_faction_name.as_deref().unwrap_or("Unknown");
+
+        // Send faction notification after transaction completes
         if new_defense <= 0 {
             let msg = format!("🏴‍☠️ **Raid complete!** {} has been **captured** by {}!", tname, fname);
             let _ = crate::comms::send_faction_system_message(pool, faction_id, &msg).await;
@@ -1291,6 +1328,34 @@ pub async fn get_recent_activity(
         FROM territories t
         LEFT JOIN factions f ON t.controlling_faction_id = f.id
         ORDER BY t.id
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    {
+        activities.extend(rows);
+    }
+
+    // Active raid plans
+    if let Ok(rows) = sqlx::query_as::<_, ActivityEvent>(
+        r#"
+        SELECT 
+            'raid' as event_type,
+            'Raid Planning' as label,
+            CONCAT(rp.target_territory_name, ' — ', rp.total_influence, ' INF (', COALESCE(rc.c, 0), ' participants)') as description,
+            rp.created_at as timestamp,
+            '⚔️' as icon
+        FROM (
+            SELECT r.id, r.total_influence, r.created_at, t.name as target_territory_name
+            FROM raid_plans r
+            JOIN territories t ON r.target_territory_id = t.id
+            WHERE r.status = 'planning'
+        ) rp
+        LEFT JOIN LATERAL (
+            SELECT COUNT(*) as c FROM raid_participants rp2 WHERE rp2.raid_id = rp.id
+        ) rc ON true
+        ORDER BY rp.created_at DESC
+        LIMIT 5
         "#
     )
     .fetch_all(pool)

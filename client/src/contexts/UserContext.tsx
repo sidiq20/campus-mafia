@@ -53,8 +53,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       }
       return res.json();
     },
-    retry: false,
+    retry: 2,
+    retryDelay: 1_000,
     staleTime: 30_000,
+    refetchOnMount: true,
   });
 
   return (

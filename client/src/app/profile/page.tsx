@@ -27,6 +27,7 @@ import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // Types for profile data
@@ -49,9 +50,33 @@ export default function ProfilePage() {
   const { user, isLoading, refetch } = useUser();
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState('');
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
 
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [bioText, setBioText] = useState('');
+
+  const handleUsernameUpdate = async () => {
+    const trimmed = newUsername.trim().toLowerCase();
+    if (trimmed.length < 3) { toast.error('Username must be at least 3 characters'); return; }
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) { toast.error('Only letters, numbers, hyphens, underscores'); return; }
+    try {
+      const res = await apiFetch('/api/auth/username', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: trimmed })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || 'Username taken');
+      }
+      toast.success('Username updated!');
+      setIsEditingUsername(false);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update username');
+    }
+  };
 
   const handleUpdate = async () => {
     try {
@@ -122,7 +147,33 @@ export default function ProfilePage() {
                     </button>
                   </div>
                 )}
-                <p className="text-zinc-500 font-mono text-sm mb-2">@{user.username}</p>
+                <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                  {isEditingUsername ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-zinc-500 font-mono text-sm">@</span>
+                      <input 
+                        value={newUsername}
+                        onChange={e => setNewUsername(e.target.value)}
+                        className="bg-black border border-green-500/50 rounded px-2 py-1 text-sm text-zinc-300 outline-none w-40"
+                        placeholder="choose a username"
+                      />
+                      <button onClick={handleUsernameUpdate} className="text-green-500 hover:text-green-400 p-1"><Check size={16}/></button>
+                      <button onClick={() => setIsEditingUsername(false)} className="text-red-500 hover:text-red-400 p-1"><X size={16}/></button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-zinc-500 font-mono text-sm">@{user.username}</p>
+                      {user.username.includes('@') && (
+                        <button 
+                          onClick={() => { setNewUsername(user.username.split('@')[0]); setIsEditingUsername(true); }} 
+                          className="text-[9px] font-bold text-yellow-500 hover:text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded uppercase tracking-widest transition-all flex items-center gap-1"
+                        >
+                          <Edit2 size={10} /> Set Username
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
                 
                 {/* Bio */}
                 {isEditingBio ? (
@@ -258,9 +309,8 @@ function ProfileBroadcastsSection() {
 
 function ProfilePostCard({ post, isMine, queryClient }: { post: Post; isMine: boolean; queryClient: any }) {
   const { user } = useUser();
-  const [showComments, setShowComments] = useState(false);
-  const [commentText, setCommentText] = useState('');
   const isPinned = user?.pinned_post_id === post.id;
+  const router = useRouter();
 
   const boostMutation = useMutation({
     mutationFn: async () => {
@@ -289,13 +339,20 @@ function ProfilePostCard({ post, isMine, queryClient }: { post: Post; isMine: bo
     }
   });
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a')) return;
+    router.push(`/posts/${post.id}`);
+  };
+
   return (
-    <div className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-all">
-      <Link href={`/posts/${post.id}`} className="block">
-        <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
-      </Link>
+    <div
+      onClick={handleCardClick}
+      className="border border-zinc-800 bg-black/30 p-4 rounded-lg hover:border-green-500/20 transition-all cursor-pointer"
+    >
+      <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
       <div className="flex items-center gap-4 pt-3 border-t border-zinc-800/50">
-        <button onClick={() => boostMutation.mutate()} disabled={boostMutation.isPending || post.has_boosted}
+        <button onClick={(e) => { e.stopPropagation(); boostMutation.mutate(); }} disabled={boostMutation.isPending || post.has_boosted}
           className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest transition-colors ${post.has_boosted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}>
           <Zap size={12} className={post.has_boosted ? "fill-green-500" : ""} /> {post.has_boosted ? 'Boosted' : 'Boost'}
         </button>

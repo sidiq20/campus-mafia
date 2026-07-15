@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
-import { ArrowLeft, Zap, MessageSquare, Repeat2, Trash2, Reply, User } from 'lucide-react';
+import { ArrowLeft, Zap, MessageSquare, Repeat2, Trash2, Reply, User, Share2 } from 'lucide-react';
 
 type Post = {
   id: string;
@@ -272,6 +272,22 @@ export default function PostDetailPage() {
                 <Repeat2 size={16} className={`transition-colors ${post.has_reposted ? 'text-green-500' : 'group-hover:text-green-400'}`} />
                 <span className={`font-medium tabular-nums ${post.has_reposted ? 'text-green-500' : ''}`}>{repostCount || ''}</span>
               </button>
+
+              {/* Share */}
+              <button
+                onClick={() => {
+                  const url = window.location.href;
+                  if (navigator.share) {
+                    navigator.share({ title: 'DepartmentOS Broadcast', text: post.content.slice(0, 100), url }).catch(() => {});
+                  } else {
+                    navigator.clipboard.writeText(url).then(() => toast.success('Link copied')).catch(() => {});
+                  }
+                }}
+                className="group flex items-center gap-1.5 text-xs text-zinc-500 hover:text-green-400 transition-colors"
+                title="Share"
+              >
+                <Share2 size={16} className="group-hover:text-green-400 transition-colors" />
+              </button>
             </div>
           </div>
 
@@ -431,6 +447,16 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed')
   });
 
+  const sendingRef = useRef(false);
+
+  const handleReply = () => {
+    if (!text.trim() || mutation.isPending || sendingRef.current) return;
+    sendingRef.current = true;
+    mutation.mutate(undefined, {
+      onSettled: () => { sendingRef.current = false; },
+    });
+  };
+
   return (
     <div className="flex items-center gap-3">
       <input
@@ -439,11 +465,16 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
         onChange={e => setText(e.target.value)}
         placeholder={placeholder}
         className="flex-1 bg-transparent border-none outline-none text-sm text-zinc-200 placeholder-zinc-600"
-        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && text.trim() && mutation.mutate()}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleReply();
+          }
+        }}
       />
       <button
-        onClick={() => mutation.mutate()}
-        disabled={!text.trim() || mutation.isPending}
+        onClick={handleReply}
+        disabled={!text.trim() || mutation.isPending || sendingRef.current}
         className="px-4 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-full text-xs font-bold transition-all disabled:cursor-not-allowed"
       >
         {mutation.isPending ? (

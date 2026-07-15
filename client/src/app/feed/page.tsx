@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search, User, Hash } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
@@ -12,6 +12,7 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type Post = {
   id: string;
@@ -39,43 +40,13 @@ type Comment = {
   created_at: string;
 };
 
-type UserSearchResult = {
-  id: string;
-  username: string;
-  display_name: string;
-};
-
 export default function Dashboard() {
   const queryClient = useQueryClient();
   const { user } = useUser();
   const [content, setContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const { data: searchUsers, isFetching: isSearchLoading } = useQuery<UserSearchResult[]>({
-    queryKey: ['feed-search-users', searchQuery],
-    queryFn: async () => {
-      if (!searchQuery.trim()) return [];
-      const res = await apiFetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
-      return res.ok ? res.json() : [];
-    },
-    staleTime: 15_000,
-    enabled: searchQuery.trim().length > 0,
-  });
-
-  // Close search dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setShowSearchDropdown(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
 
   const { data: posts, isLoading, refetch } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -87,6 +58,7 @@ export default function Dashboard() {
     staleTime: 30_000,
   });
 
+  // Client-side filter for immediate visual feedback; search page is the primary endpoint
   const filteredPosts = searchQuery.trim()
     ? posts?.filter(post => 
         post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -169,91 +141,24 @@ export default function Dashboard() {
     <DashboardLayout>
       <header className="h-16 border-b border-green-500/30 flex items-center justify-between px-8 bg-black/60 backdrop-blur-md">
         <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text">Global Feed // Live</h2>
-        <div ref={searchRef} className="relative">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-            <input 
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                if (e.target.value.trim()) setShowSearchDropdown(true);
-              }}
-              onFocus={() => { if (searchQuery.trim()) setShowSearchDropdown(true); }}
-              placeholder="Search intel, operatives..."
-              className="bg-zinc-900 border border-zinc-800 rounded pl-9 pr-4 py-1.5 text-xs outline-none focus:border-green-500/50 text-zinc-200 w-64"
-            />
-          </div>
-
-          {/* Search Dropdown */}
-          {showSearchDropdown && searchQuery.trim() && (
-            <div className="absolute top-full mt-1 right-0 w-80 sm:w-96 bg-black border border-zinc-800 rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.8)] z-50 max-h-96 overflow-y-auto">
-              {/* Users Section */}
-              {searchUsers && searchUsers.length > 0 && (
-                <div>
-                  <div className="px-4 py-2 text-[9px] font-bold text-zinc-600 uppercase tracking-widest border-b border-zinc-800/50 flex items-center gap-2">
-                    <User size={10} /> Operatives
-                  </div>
-                  {searchUsers.slice(0, 5).map(u => (
-                    <Link
-                      key={u.id}
-                      href={`/profile/${u.username}`}
-                      onClick={() => { setShowSearchDropdown(false); setSearchQuery(''); }}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-900/80 transition-colors border-b border-zinc-800/30 last:border-0"
-                    >
-                      <div className="w-7 h-7 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                        <User size={12} className="text-zinc-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="block text-xs font-bold text-zinc-200 truncate">{u.display_name}</span>
-                        <span className="text-[10px] text-zinc-500 truncate">@{u.username}</span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-
-              {/* Posts Section */}
-              {filteredPosts && filteredPosts.length > 0 && (
-                <div>
-                  <div className="px-4 py-2 text-[9px] font-bold text-zinc-600 uppercase tracking-widest border-b border-zinc-800/50 flex items-center gap-2">
-                    <Hash size={10} /> Intel Reports
-                  </div>
-                  {filteredPosts.slice(0, 5).map(p => (
-                    <div
-                      key={p.id}
-                      onClick={() => { setShowSearchDropdown(false); }}
-                      className="px-4 py-2.5 hover:bg-zinc-900/80 transition-colors border-b border-zinc-800/30 last:border-0 cursor-pointer"
-                    >
-                      <div className="text-[10px] text-zinc-500 truncate mb-0.5">
-                        {p.is_anonymous ? 'Anonymous' : `@${p.author_name}`}
-                        <span className="mx-1.5 text-zinc-700">·</span>
-                        {p.created_at ? new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'now'}
-                      </div>
-                      <p className="text-xs text-zinc-300 truncate"><MentionText text={p.content} /></p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Loading state */}
-              {isSearchLoading && (
-                <div className="px-4 py-6 text-center">
-                  <p className="text-[10px] text-green-500/60 animate-pulse uppercase tracking-widest">Scanning frequencies...</p>
-                </div>
-              )}
-
-              {/* Empty state */}
-              {!isSearchLoading && (!searchUsers || searchUsers.length === 0) && (!filteredPosts || filteredPosts.length === 0) && (
-                <div className="px-4 py-8 text-center">
-                  <p className="text-xs text-zinc-600">No operatives or intel found</p>
-                  <p className="text-[10px] text-zinc-700 mt-1">Try a different search term</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (searchQuery.trim()) {
+              router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+            }
+          }}
+          className="relative"
+        >
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search intel, operatives..."
+            className="bg-zinc-900 border border-zinc-800 rounded pl-9 pr-4 py-1.5 text-xs outline-none focus:border-green-500/50 text-zinc-200 w-64"
+          />
+        </form>
       </header>
       
       <PullToRefresh onRefresh={refetch} className="flex-1">
@@ -328,6 +233,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const isPinned = user?.pinned_post_id === post.id;
+  const router = useRouter();
 
   const displayAuthor = post.is_anonymous ? 'Anonymous' : `@${post.author_name}`;
   const displayFaction = post.is_anonymous ? 'Classified' : (post.faction_name || 'Unaffiliated');
@@ -389,6 +295,8 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
     }
   });
 
+  const commentSendingRef = useRef(false);
+
   const { data: comments } = useQuery<Comment[]>({
     queryKey: ['comments', post.id],
     queryFn: async () => {
@@ -408,20 +316,32 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       });
       if (!res.ok) throw new Error('Failed to comment');
     },
+    onMutate: () => { commentSendingRef.current = true; },
     onSuccess: () => {
       setCommentText('');
       toast.success("Comment added (+2 INF)");
       queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
-    }
+    },
+    onSettled: () => { commentSendingRef.current = false; },
   });
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't navigate if interacting with buttons/links inside
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('textarea')) return;
+    router.push(`/posts/${post.id}`);
+  };
+
   return (
-    <div className="border border-zinc-800 bg-black/60 p-6 rounded-lg hover:border-green-500/30 transition-all duration-300 shadow-[0_0_15px_rgba(0,0,0,0.3)]">
+    <div 
+      onClick={handleCardClick}
+      className="border border-zinc-800 bg-black/60 p-6 rounded-lg hover:border-green-500/30 transition-all duration-300 shadow-[0_0_15px_rgba(0,0,0,0.3)] cursor-pointer"
+    >
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-sm bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+          <div className="w-8 h-8 rounded-sm bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500" onClick={e => e.stopPropagation()}>
             <Zap size={14} />
           </div>
           <div>
@@ -429,8 +349,8 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
               <span className="block font-bold text-sm text-zinc-500">Anonymous</span>
             ) : (
               <div className="flex items-center gap-2">
-                <Link href={`/profile/${post.author_username || post.author_name}`} className="block font-bold text-sm text-zinc-200 hover:text-green-400">@{post.author_name}</Link>
-                <Link href={`/chat/${post.author_username || post.author_name}`} className="text-[9px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1 rounded uppercase">DM</Link>
+                <Link href={`/profile/${post.author_username || post.author_name}`} onClick={e => e.stopPropagation()} className="block font-bold text-sm text-zinc-200 hover:text-green-400">@{post.author_name}</Link>
+                <Link href={`/chat/${post.author_username || post.author_name}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1 rounded uppercase">DM</Link>
               </div>
             )}
             <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{displayFaction}</span>
@@ -441,20 +361,18 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
             {post.created_at ? new Date(post.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
           </span>
           {isMine && (
-            <button onClick={() => deleteMutation.mutate()} className="text-zinc-600 hover:text-red-500 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(); }} className="text-zinc-600 hover:text-red-500 transition-colors">
               <Trash2 size={14} />
             </button>
           )}
         </div>
       </div>
-      <Link href={`/posts/${post.id}`} className="block group">
-        <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono group-hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
-      </Link>
+      <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
       <div className="flex justify-between items-center pt-4 border-t border-zinc-800/50">
         <div className="flex items-center gap-6 sm:gap-10">
           {/* Reply */}
           <button 
-            onClick={() => setShowComments(!showComments)}
+            onClick={(e) => { e.stopPropagation(); setShowComments(!showComments); }}
             className="group flex items-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors"
             title={`${post.reply_count} Replies`}
           >
@@ -463,7 +381,8 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           </button>
           {/* Boost */}
           <button 
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (isAnonymousUser) {
                 toast.error("Anonymous Operatives cannot boost transmissions. Create an identity first.");
                 return;
@@ -479,7 +398,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           </button>
           {/* Repost */}
           <button 
-            onClick={() => !isAnonymousUser && repostMutation.mutate()}
+            onClick={(e) => { e.stopPropagation(); !isAnonymousUser && repostMutation.mutate(); }}
             disabled={repostMutation.isPending}
             className={`group flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 ${post.has_reposted ? 'text-green-500 cursor-default' : 'text-zinc-500 hover:text-green-400'}`}
             title={post.has_reposted ? 'Reposted' : 'Repost'}
@@ -490,7 +409,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           {/* Pin (own posts only) */}
           {isMine && (
             <button 
-              onClick={() => pinMutation.mutate()}
+              onClick={(e) => { e.stopPropagation(); pinMutation.mutate(); }}
               disabled={pinMutation.isPending}
               className={`group flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 ${isPinned ? 'text-yellow-500' : 'text-zinc-500 hover:text-yellow-400'}`}
               title={isPinned ? 'Pinned' : 'Pin'}
@@ -502,31 +421,39 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       </div>
 
       {showComments && (
-        <div className="mt-6 pt-6 border-t border-zinc-800 space-y-4 pl-6 border-l border-zinc-800">
+        <div className="mt-6 pt-6 border-t border-zinc-800 space-y-4 pl-4 sm:pl-6 border-l border-zinc-800">
           {comments?.map(c => (
-            <div key={c.id} className="text-xs flex justify-between">
-              <div>
-                <Link href={`/profile/${c.author_username || c.author_name}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-400 hover:text-green-400 mr-3 transition-colors">@{c.author_name}</Link>
-                <span className="text-zinc-300"><MentionText text={c.content} /></span>
+            <div key={c.id} className="text-xs flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+              <div className="min-w-0">
+                <Link href={`/profile/${c.author_username || c.author_name}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-400 hover:text-green-400 mr-2 sm:mr-3 transition-colors whitespace-nowrap">@{c.author_name}</Link>
+                <span className="text-zinc-300 break-words"><MentionText text={c.content} /></span>
               </div>
-              <span className="text-[9px] font-mono text-zinc-600">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+              <span className="text-[9px] font-mono text-zinc-600 shrink-0">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             </div>
           ))}
-          <div className="flex gap-3 mt-4">
-            <input 
+          <div className="flex gap-2 sm:gap-3 mt-4">              <input 
               type="text" 
               value={commentText}
               onChange={e => setCommentText(e.target.value)}
               placeholder="Add your intel..." 
-              className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-4 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-200"
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && commentMutation.mutate()}
+              className="flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded px-3 sm:px-4 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-200"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!commentText.trim() || commentSendingRef.current) return;
+                  commentMutation.mutate();
+                }
+              }}
             />
             <button 
-              onClick={() => commentMutation.mutate()}
-              disabled={!commentText.trim() || commentMutation.isPending}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50"
+              onClick={() => {
+                if (!commentText.trim() || commentSendingRef.current) return;
+                commentMutation.mutate();
+              }}
+              disabled={!commentText.trim() || commentSendingRef.current}
+              className="px-3 sm:px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 shrink-0"
             >
-              {commentMutation.isPending ? '...' : 'Reply'}
+              {commentSendingRef.current ? '...' : 'Reply'}
             </button>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { Toaster, toast } from 'sonner';
 import PwaInstallBanner from './PwaInstallBanner';
 import PetCat from './PetCat';
 import { WS_URL, clearToken, apiFetch } from '@/lib/api';
+import { p2pManager } from '@/lib/offline';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -83,6 +84,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isLeftOpen]);
 
+  // P2P connection status
+  const [p2pPeers, setP2pPeers] = useState<string[]>([]);
+
+  // Initialize P2P manager when user is authenticated
+  useEffect(() => {
+    if (!user?.username) return;
+    p2pManager.init(user.username, WS_URL);
+
+    p2pManager.onConnection((username, connected) => {
+      setP2pPeers(prev => {
+        if (connected) return prev.includes(username) ? prev : [...prev, username];
+        return prev.filter(n => n !== username);
+      });
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+    });
+
+    p2pManager.onMessage((from, content) => {
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+    });
+
+    // Listen for local broadcast messages and update peer count
+    p2pManager.onLocalMessage((from, content) => {
+      setP2pPeers(p2pManager.getConnectedPeers());
+    });
+
+    // Re-check peers periodically
+    const peerCheckInterval = setInterval(() => {
+      setP2pPeers(p2pManager.getConnectedPeers());
+    }, 3000);
+
+    // Try to sync any pending offline messages
+    p2pManager.syncPendingMessages(apiFetch);
+
+    return () => {
+      clearInterval(peerCheckInterval);
+      p2pManager.disconnectAll();
+    };
+  }, [user?.username]);
+
   useEffect(() => {
     const ws = new WebSocket(`${WS_URL}/api/ws`);
     wsRef.current = ws;
@@ -109,6 +149,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (data.type === 'NewPost') { title = 'Intel Drop'; body = `@${data.author} broadcasted a message.`; toast(title, { description: body }); }
         if (data.type === 'TerritoryAttacked') { title = 'Attack Detected'; body = `${data.territory_name} was hit!`; toast.error(title, { description: body }); }
         if (data.type === 'TerritoryCaptured') { title = 'Territory Captured'; body = `${data.territory_name} was taken!`; toast.success(title, { description: body }); }
+        if (data.type === 'RaidPlanned') { title = 'Raid Planned'; body = `@${data.planner_name} planned a raid on ${data.target_territory}!`; toast.info(title, { description: body }); }
+        if (data.type === 'RaidJoined') { title = 'Raid Joined'; body = `@${data.joiner_name} joined the raid on ${data.target_territory}!`; toast.info(title, { description: body }); }
+        if (data.type === 'RaidExecuted') { title = 'Raid Executed'; body = data.captured ? `${data.target_territory} was captured by ${data.faction_name}!` : `${data.target_territory} was hit for ${data.total_influence} damage!`; toast.success(title, { description: body }); }
         if (data.type === 'Notification' && data.target_username === user?.username) {
           title = data.from ? `DM from ${data.from}` : 'New Message';
           body = 'You have a new direct message';
@@ -196,6 +239,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NavItem href="/profile" icon={<User size={18} />} label="Profile" active={pathname === '/profile'} />
           </nav>
         </div>
+
+        {/* P2P Status Indicator */}
+        {user && p2pPeers.length > 0 && (
+          <div className="px-4 py-2 border border-green-500/20 rounded bg-green-500/5 flex items-center gap-2">
+            <span className="relative w-2 h-2">
+              <span className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-60" />
+              <span className="absolute inset-0 bg-green-500 rounded-full" />
+            </span>
+            <span className="text-[9px] text-green-400 uppercase tracking-widest font-bold">
+              P2P · {p2pPeers.length} peer{p2pPeers.length > 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
 
         <div className="mt-auto p-4 border border-zinc-800 rounded bg-zinc-950/50">
           {user ? (
@@ -337,10 +393,10 @@ function LiveActivityFeed({ wsMessages }: { wsMessages: any[] }) {
   const merged = useMemo(() => {
     const wsEvents = [...wsMessages].reverse().slice(0, 15).map(msg => ({
       event_type: msg.type || 'live',
-      label: msg.type === 'NewPost' ? '📡 Intel Drop' : msg.type === 'ChatMessage' ? '💬 Chat' : msg.type === 'TerritoryAttacked' ? '⚔️ Attack' : msg.type === 'TerritoryCaptured' ? '🏴 Capture' : '📢 Event',
-      description: msg.content || msg.msg || `${msg.territory_name || ''} ${msg.action || ''}`,
+      label: msg.type === 'NewPost' ? '📡 Intel Drop' : msg.type === 'ChatMessage' ? '💬 Chat' : msg.type === 'TerritoryAttacked' ? '⚔️ Attack' : msg.type === 'TerritoryCaptured' ? '🏴 Capture' : msg.type === 'RaidPlanned' ? '⚔️ Raid Planned' : msg.type === 'RaidJoined' ? '🤝 Raid Joined' : msg.type === 'RaidExecuted' ? (msg.captured ? '🏴 Territory Captured' : '💥 Raid Executed') : '📢 Event',
+      description: msg.content || msg.msg || msg.target_territory ? `${msg.target_territory} ${msg.captured ? 'captured' : msg.total_influence ? `hit for ${msg.total_influence} INF` : msg.influence_committed ? `${msg.influence_committed} INF committed` : ''}` : `${msg.territory_name || ''} ${msg.action || ''}`,
       timestamp: new Date().toISOString(),
-      icon: msg.type === 'NewPost' ? '📡' : msg.type === 'ChatMessage' ? '💬' : msg.type === 'TerritoryAttacked' ? '⚔️' : msg.type === 'TerritoryCaptured' ? '🏴' : '📢'
+      icon: msg.type === 'NewPost' ? '📡' : msg.type === 'ChatMessage' ? '💬' : msg.type === 'TerritoryAttacked' ? '⚔️' : msg.type === 'TerritoryCaptured' ? '🏴' : msg.type === 'RaidPlanned' ? '⚔️' : msg.type === 'RaidJoined' ? '🤝' : msg.type === 'RaidExecuted' ? (msg.captured ? '🏴' : '💥') : '📢'
     }));
     
     return [...(serverActivity || []), ...wsEvents];
@@ -377,6 +433,10 @@ const activityStyles: Record<string, { border: string, dot: string, bg: string }
   ChatMessage: { border: 'border-l-cyan-500/50', dot: 'bg-cyan-500', bg: 'hover:bg-cyan-950/20' },
   TerritoryAttacked: { border: 'border-l-red-500/50', dot: 'bg-red-500', bg: 'hover:bg-red-950/20' },
   TerritoryCaptured: { border: 'border-l-orange-500/50', dot: 'bg-orange-500', bg: 'hover:bg-orange-950/20' },
+  raid: { border: 'border-l-orange-500/50', dot: 'bg-orange-500', bg: 'hover:bg-orange-950/20' },
+  RaidPlanned: { border: 'border-l-orange-500/50', dot: 'bg-orange-500', bg: 'hover:bg-orange-950/20' },
+  RaidJoined: { border: 'border-l-yellow-500/50', dot: 'bg-yellow-500', bg: 'hover:bg-yellow-950/20' },
+  RaidExecuted: { border: 'border-l-red-500/50', dot: 'bg-red-500', bg: 'hover:bg-red-950/20' },
 };
 
 function ActivityCard({ item }: { item: ActivityItem }) {

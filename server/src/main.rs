@@ -27,6 +27,8 @@ mod titles;
 mod push;
 mod cache;
 mod group_chats;
+mod polls;
+mod bounties;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -592,6 +594,16 @@ async fn main() {
         .route("/api/raids/planned", get(game::get_planned_raids))
         .route("/api/raids/:id/join", axum::routing::post(game::join_raid))
         .route("/api/raids/:id/cancel", axum::routing::post(game::cancel_raid))
+
+        // Polls
+        .route("/api/polls", axum::routing::post(polls::create_poll))
+        .route("/api/polls/:id/vote", axum::routing::post(polls::vote_on_poll))
+        .route("/api/posts/:id/poll", get(polls::get_poll))
+
+        // Bounties
+        .route("/api/bounties", axum::routing::post(bounties::place_bounty).get(bounties::list_bounties))
+        .route("/api/bounties/:id/collect", axum::routing::post(bounties::collect_bounty))
+        .route("/api/bounties/user/:username", get(bounties::get_user_bounty_total))
 
         // Group Chats
         .route("/api/groups", axum::routing::post(group_chats::create_group).get(group_chats::get_my_groups))

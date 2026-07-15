@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut, Activity, Radio, TrendingUp, Package } from 'lucide-react';
+import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut, Activity, Radio, TrendingUp, Package, Swords, Target } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
@@ -239,6 +239,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               badge={notifications?.filter(n => !n.is_read).length || 0}
             />
             <NavItem href="/leaderboard" icon={<TrendingUp size={18} />} label="Leaderboard" active={pathname === '/leaderboard'} />
+            <NavItem href="/heists" icon={<Swords size={18} />} label="Heists" active={pathname === '/heists'} />
+            <NavItem href="/bounties" icon={<Target size={18} />} label="Bounties" active={pathname === '/bounties'} />
             <NavItem href="/inventory" icon={<Package size={18} />} label="Inventory" active={pathname === '/inventory'} />
             <NavItem href="/black-market" icon={<Zap size={18} />} label="Black Market" active={pathname === '/black-market'} />
             <NavItem href="/profile" icon={<User size={18} />} label="Profile" active={pathname === '/profile'} />

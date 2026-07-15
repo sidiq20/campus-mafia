@@ -10,6 +10,8 @@ import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
 import { ArrowLeft, Zap, MessageSquare, Repeat2, Trash2, Reply, User, Share2 } from 'lucide-react';
+import PollCard from '@/components/PollCard';
+import type { PollData } from '@/components/PollCard';
 
 type Post = {
   id: string;
@@ -62,6 +64,16 @@ export default function PostDetailPage() {
     queryFn: async () => {
       const res = await apiFetch(`/api/posts/${id}`);
       if (!res.ok) throw new Error('Post not found');
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const { data: poll } = useQuery<PollData | null>({
+    queryKey: ['poll', id],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/posts/${id}/poll`);
+      if (!res.ok) return null;
       return res.json();
     },
     staleTime: 30_000,
@@ -228,6 +240,9 @@ export default function PostDetailPage() {
                 <MentionText text={post.content} />
               </p>
             </div>
+
+            {/* Poll */}
+            {poll && <PollCard poll={poll} postId={id} />}
 
             {/* Timestamp detail */}
             <div className="pb-2 border-b border-zinc-800/30 mb-1">

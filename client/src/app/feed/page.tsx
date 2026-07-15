@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from 'react';
-import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search } from 'lucide-react';
+import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search, BarChart3, Plus, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
@@ -13,6 +13,8 @@ import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import PollCard from '@/components/PollCard';
+import type { PollData } from '@/components/PollCard';
 
 type Post = {
   id: string;
@@ -45,6 +47,9 @@ export default function Dashboard() {
   const { user } = useUser();
   const [content, setContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [showPollBuilder, setShowPollBuilder] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -65,6 +70,18 @@ export default function Dashboard() {
         post.author_name.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : posts;
+
+  const createPollMutation = useMutation({
+    mutationFn: async ({ postId, question, options }: { postId: string; question: string; options: string[] }) => {
+      const res = await apiFetch('/api/polls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: postId, question, options }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
 
   const mutation = useMutation({
     mutationFn: async (newPost: { content: string, is_anonymous: boolean }) => {
@@ -126,7 +143,20 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
     },
-    onSuccess: () => {
+    onSuccess: (post) => {
+      // If poll builder is active, create the poll on the new post
+      if (showPollBuilder && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2) {
+        const validOptions = pollOptions.filter(o => o.trim());
+        createPollMutation.mutate({
+          postId: post.id,
+          question: pollQuestion.trim(),
+          options: validOptions,
+        });
+        // Reset poll
+        setShowPollBuilder(false);
+        setPollQuestion('');
+        setPollOptions(['', '']);
+      }
       setContent('');
       toast.success('Broadcast sent (+10 INF)');
     },
@@ -176,31 +206,79 @@ export default function Dashboard() {
               className="w-full bg-transparent resize-none outline-none text-sm placeholder:text-zinc-600 text-zinc-100" 
               placeholder="Broadcast encrypted intel..."
               rows={3}
-            ></textarea>
-            <div className="flex justify-between items-center mt-4 border-t border-zinc-800 pt-4">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <BroadcastCooldown />
-                <span className="text-[10px] text-zinc-500 uppercase tracking-widest" title="+10 INF Reward"><TrendingUp size={10} className="inline mr-1" /><span className="hidden sm:inline">+10 INF Reward</span></span>
-                <label className="flex items-center gap-1 sm:gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors" title="Incognito">
-                  <input 
-                    type="checkbox" 
-                    checked={isAnonymous} 
-                    onChange={(e) => setIsAnonymous(e.target.checked)} 
-                    className="accent-green-500"
+            ></textarea>              {showPollBuilder && (
+                <div className="mb-4 border border-purple-500/20 rounded-lg bg-purple-950/10 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest flex items-center gap-1"><BarChart3 size={12} /> Poll</span>
+                    <button onClick={() => { setShowPollBuilder(false); setPollQuestion(''); setPollOptions(['', '']); }} className="text-zinc-600 hover:text-zinc-400"><X size={14} /></button>
+                  </div>
+                  <input
+                    value={pollQuestion}
+                    onChange={e => setPollQuestion(e.target.value)}
+                    placeholder="Ask a question..."
+                    className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-xs outline-none focus:border-purple-500/50 text-zinc-200 placeholder-zinc-600"
                   />
-                  <ShieldAlert size={14} /> <span className="hidden sm:inline">Incognito</span>
-                </label>
+                  {pollOptions.map((opt, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        value={opt}
+                        onChange={e => {
+                          const updated = [...pollOptions];
+                          updated[idx] = e.target.value;
+                          setPollOptions(updated);
+                        }}
+                        placeholder={`Option ${idx + 1}`}
+                        className="flex-1 bg-black border border-zinc-800 rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500/50 text-zinc-200 placeholder-zinc-600"
+                      />
+                      {pollOptions.length > 2 && (
+                        <button onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))} className="text-zinc-600 hover:text-red-400">
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {pollOptions.length < 6 && (
+                    <button
+                      onClick={() => setPollOptions([...pollOptions, ''])}
+                      className="flex items-center gap-1 text-[10px] text-purple-400 hover:text-purple-300 transition-colors"
+                    >
+                      <Plus size={12} /> Add option
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="flex justify-between items-center mt-4 border-t border-zinc-800 pt-4">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <BroadcastCooldown />
+                  <button
+                    onClick={() => setShowPollBuilder(!showPollBuilder)}
+                    className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest transition-colors ${showPollBuilder ? 'text-purple-400' : 'text-zinc-500 hover:text-purple-400'}`}
+                    title="Add Poll"
+                  >
+                    <BarChart3 size={12} />
+                    <span className="hidden sm:inline">Poll</span>
+                  </button>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest" title="+10 INF Reward"><TrendingUp size={10} className="inline mr-1" /><span className="hidden sm:inline">+10 INF Reward</span></span>
+                  <label className="flex items-center gap-1 sm:gap-2 cursor-pointer text-xs text-zinc-400 hover:text-green-400 transition-colors" title="Incognito">
+                    <input 
+                      type="checkbox" 
+                      checked={isAnonymous} 
+                      onChange={(e) => setIsAnonymous(e.target.checked)} 
+                      className="accent-green-500"
+                    />
+                    <ShieldAlert size={14} /> <span className="hidden sm:inline">Incognito</span>
+                  </label>
+                </div>
+                <button 
+                  onClick={handleBroadcast}
+                  disabled={mutation.isPending || !content.trim()}
+                  title="Broadcast"
+                  className="px-3 sm:px-6 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all duration-300 disabled:opacity-50"
+                >
+                  {mutation.isPending ? '...' : '📡'}
+                  <span className="hidden sm:inline ml-1">{mutation.isPending ? 'Transmitting...' : 'Broadcast'}</span>
+                </button>
               </div>
-              <button 
-                onClick={handleBroadcast}
-                disabled={mutation.isPending || !content.trim()}
-                title="Broadcast"
-                className="px-3 sm:px-6 py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded text-xs font-bold uppercase tracking-widest hover:bg-green-500/20 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all duration-300 disabled:opacity-50"
-              >
-                {mutation.isPending ? '...' : '📡'}
-                <span className="hidden sm:inline ml-1">{mutation.isPending ? 'Transmitting...' : 'Broadcast'}</span>
-              </button>
-            </div>
           </div>
 
           {/* Real Posts */}
@@ -225,6 +303,21 @@ export default function Dashboard() {
       </PullToRefresh>
     </DashboardLayout>
   );
+}
+
+function PollDisplay({ postId }: { postId: string }) {
+  const { data: poll } = useQuery<PollData | null>({
+    queryKey: ['poll', postId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/posts/${postId}/poll`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  if (!poll) return null;
+  return <PollCard poll={poll} postId={postId} />;
 }
 
 function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boolean, isAnonymousUser?: boolean }) {
@@ -368,6 +461,10 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
         </div>
       </div>
       <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
+
+      {/* Poll Display */}
+      <PollDisplay postId={post.id} />
+
       <div className="flex justify-between items-center pt-4 border-t border-zinc-800/50">
         <div className="flex items-center gap-6 sm:gap-10">
           {/* Reply */}

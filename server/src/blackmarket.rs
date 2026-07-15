@@ -48,6 +48,7 @@ pub async fn purchase_item(
         "propaganda_boost" => 250,
         "identity_scrambler" => 100,
         "inf_cap_bypass" => 5000,
+        "bounty_kill" => 200,
         _ => return Err((StatusCode::BAD_REQUEST, "Invalid item".to_string())),
     };
 
@@ -194,6 +195,37 @@ pub async fn use_item(
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        },
+        "bounty_kill" => {
+            // Grants bounty hunter status for 24 hours — allows collecting bounties
+            // Check if effect already exists, extend if so, insert if not
+            let has_active: Option<bool> = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'bounty_hunter' AND expires_at > NOW())"
+            )
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .flatten();
+
+            if has_active.unwrap_or(false) {
+                // Extend by 24h
+                sqlx::query(
+                    "UPDATE active_effects SET expires_at = expires_at + INTERVAL '24 hours' WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'bounty_hunter'"
+                )
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            } else {
+                sqlx::query(
+                    "INSERT INTO active_effects (target_type, target_id, effect_id, expires_at) VALUES ('user', $1, 'bounty_hunter', NOW() + INTERVAL '24 hours')"
+                )
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            }
         },
         _ => return Err((StatusCode::BAD_REQUEST, "Invalid item".to_string())),
     }

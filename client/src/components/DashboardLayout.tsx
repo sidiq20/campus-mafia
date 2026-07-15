@@ -14,6 +14,7 @@ import OnboardingWalkthrough from './OnboardingWalkthrough';
 import AccentThemePicker from './AccentThemePicker';
 import { WS_URL, clearToken, apiFetch } from '@/lib/api';
 import { p2pManager } from '@/lib/offline';
+import { useSync } from '@/lib/useSync';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -44,6 +45,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     staleTime: 15_000,
     enabled: !!user
   });
+  
+  // Multi-device sync: keep notifications and DM state in sync across devices
+  useSync(!!user);
+
   const wsRef = useRef<WebSocket | null>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);

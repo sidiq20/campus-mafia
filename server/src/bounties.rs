@@ -121,16 +121,29 @@ pub async fn place_bounty(
         "amount": payload.amount,
         "target_username": payload.target_username,
     })))
-}
-
-/// Collect a bounty. The caller must provide the target_id (the bounty target).
-/// This is called when someone uses a "bounty_kill" item or otherwise neutralizes the target.
+}/// Collect a bounty. Requires the user to have an active `bounty_hunter` effect
+/// (activated by consuming a `bounty_kill` item from the Black Market).
 pub async fn collect_bounty(
     auth_user: AuthUser,
     State(state): State<ServerState>,
     Path(bounty_id): Path<uuid::Uuid>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    // Check the user has an active bounty_hunter effect (from using a bounty_kill item)
+    let has_hunter_status: bool = sqlx::query_scalar::<_, Option<bool>>(
+        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'bounty_hunter' AND expires_at > NOW())"
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .unwrap_or(false);
+
+    if !has_hunter_status {
+        return Err((StatusCode::FORBIDDEN, "You need bounty hunter status to collect bounties. Purchase and use a 'bounty_kill' item from the Black Market.".to_string()));
+    }
 
     // Get bounty info
     #[derive(sqlx::FromRow)]
@@ -155,11 +168,11 @@ pub async fn collect_bounty(
     }
 
     // The collector must be different from both target and placer
-    if auth_user.user_id == bounty.target_user_id {
+    if user_id == bounty.target_user_id {
         return Err((StatusCode::BAD_REQUEST, "You cannot collect the bounty on your own head".to_string()));
     }
 
-    if auth_user.user_id == bounty.placed_by_user_id {
+    if user_id == bounty.placed_by_user_id {
         return Err((StatusCode::BAD_REQUEST, "You cannot collect your own bounty".to_string()));
     }
 
@@ -169,7 +182,7 @@ pub async fn collect_bounty(
     sqlx::query(
         "UPDATE bounties SET status = 'collected', collected_by_user_id = $1, collected_at = NOW() WHERE id = $2"
     )
-    .bind(auth_user.user_id)
+    .bind(user_id)
     .bind(bounty_id)
     .execute(&mut *tx)
     .await
@@ -178,14 +191,13 @@ pub async fn collect_bounty(
     // Award INF to collector
     sqlx::query("UPDATE users SET influence = influence + $1 WHERE id = $2")
         .bind(bounty.amount)
-        .bind(auth_user.user_id)
+        .bind(user_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // Notify target that bounty was collected (they got "killed")
     let collector_name: String = sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
-        .bind(auth_user.user_id)
+        .bind(user_id)
         .fetch_one(pool)
         .await
         .unwrap_or_else(|_| "An operative".to_string());
@@ -313,6 +325,42 @@ pub async fn list_bounties(
     }).collect();
 
     Json(bounties)
+}
+
+/// Check if the current user has active bounty hunter status (from using a bounty_kill item)
+pub async fn get_hunter_status(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+) -> Json<serde_json::Value> {
+    let pool = &state.pool;
+
+    let has_status: bool = sqlx::query_scalar::<_, Option<bool>>(
+        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'bounty_hunter' AND expires_at > NOW())"
+    )
+    .bind(auth_user.user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(Some(false))
+    .unwrap_or(false);
+
+    // Get expiry time if active
+    let expires_at: Option<chrono::DateTime<chrono::Utc>> = if has_status {
+        sqlx::query_scalar(
+            "SELECT expires_at FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'bounty_hunter'"
+        )
+        .bind(auth_user.user_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or_default()
+        .flatten()
+    } else {
+        None
+    };
+
+    Json(serde_json::json!({
+        "active": has_status,
+        "expires_at": expires_at,
+    }))
 }
 
 /// Get the active bounty amount on a specific user

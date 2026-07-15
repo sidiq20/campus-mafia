@@ -605,6 +605,7 @@ async fn main() {
         .route("/api/bounties", axum::routing::post(bounties::place_bounty).get(bounties::list_bounties))
         .route("/api/bounties/:id/collect", axum::routing::post(bounties::collect_bounty))
         .route("/api/bounties/user/:username", get(bounties::get_user_bounty_total))
+        .route("/api/bounties/hunter-status", get(bounties::get_hunter_status))
 
         // Group Chats
         .route("/api/groups", axum::routing::post(group_chats::create_group).get(group_chats::get_my_groups))

@@ -6,7 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { apiFetch } from '@/lib/api';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
-import { Swords, Skull, User, Target, Zap, Clock, X, Crosshair } from 'lucide-react';
+import { Swords, Skull, User, Target, Zap, Clock, X, Crosshair, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 type Bounty = {
@@ -57,6 +57,19 @@ export default function BountiesPage() {
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  // Check if user has active bounty hunter status (from using a bounty_kill item)
+  const { data: hunterStatus } = useQuery<{ active: boolean; expires_at: string | null }>({
+    queryKey: ['bounty-hunter-status'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/bounties/hunter-status');
+      return res.ok ? res.json() : { active: false, expires_at: null };
+    },
+    staleTime: 30_000,
+    enabled: !!user,
+  });
+
+  const hasBountyHunter = hunterStatus?.active ?? false;
 
   const collectBountyMutation = useMutation({
     mutationFn: async (bountyId: string) => {
@@ -133,6 +146,24 @@ export default function BountiesPage() {
             </div>
           )}
 
+          {/* Bounty Hunter status banner */}
+          {user && (
+            <div className={`px-4 py-3 rounded-lg border text-xs flex items-center gap-3 ${
+              hasBountyHunter
+                ? 'border-green-500/30 bg-green-950/10 text-green-400'
+                : 'border-yellow-500/20 bg-yellow-950/10 text-yellow-400'
+            }`}>
+              <ShieldAlert size={16} />
+              <div>
+                {hasBountyHunter ? (
+                  <>Active <span className="font-bold">Bounty Hunter</span> status — you can collect bounties!</>
+                ) : (
+                  <><span className="font-bold">Need Bounty Hunter status?</span> Purchase a <span className="font-bold">bounty_kill</span> item from the <Link href="/black-market" className="underline hover:text-green-400">Black Market</Link> and use it from your <Link href="/inventory" className="underline hover:text-green-400">Inventory</Link>.</>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Active Bounties */}
           <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2">
             <Swords size={14} className="text-red-500" /> Active Contracts
@@ -158,7 +189,7 @@ export default function BountiesPage() {
                 const expiresIn = Math.max(0, Math.floor((new Date(b.expires_at).getTime() - Date.now()) / 3600000));
                 const isMyPlacer = user?.id === b.placed_by_user_id;
                 const isMyTarget = user?.id === b.target_user_id;
-                const canCollect = user && !isMyPlacer && !isMyTarget;
+                const canCollect = user && !isMyPlacer && !isMyTarget && hasBountyHunter;
 
                 return (
                   <div

@@ -27,6 +27,7 @@ mod titles;
 mod push;
 mod cache;
 mod group_chats;
+mod ice_servers;
 mod polls;
 mod bounties;
 mod sync;
@@ -636,6 +637,9 @@ async fn main() {
         .route("/api/push/vapid-public-key", get(push::get_vapid_public_key))
         .route("/api/push/subscribe", axum::routing::post(push::subscribe))
         .route("/api/push/unsubscribe", axum::routing::post(push::unsubscribe))
+
+        // ICE Servers (TURN/STUN for P2P)
+        .route("/api/ice-servers", get(ice_servers::get_ice_servers))
 
         // Websocket
         .route("/api/ws", get(ws::ws_handler))

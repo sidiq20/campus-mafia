@@ -392,6 +392,9 @@ CMD ["./server"]
 | `PORT` | ❌ | `8080` | HTTP server port |
 | `VAPID_PUBLIC_KEY` | ❌ | — | VAPID public key for push notifications |
 | `VAPID_PRIVATE_KEY` | ❌ | — | VAPID private key for push notifications |
+| `TURN_SERVER_URL` | ❌ | — | TURN server URL for P2P NAT traversal (e.g. `turn:turn.example.com:3478`) |
+| `TURN_USERNAME` | ❌ | — | TURN server username credential |
+| `TURN_CREDENTIAL` | ❌ | — | TURN server password credential |
 
 ### Client (`client/.env.local`)
 

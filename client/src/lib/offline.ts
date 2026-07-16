@@ -123,7 +123,7 @@ export class P2PManager {
   private positionWatchId: number | null = null;
   private onPeerPositionUpdate: ((positions: PeerPosition[]) => void) | null = null;
 
-  // ICE servers for NAT traversal
+  // ICE servers for NAT traversal (fetched from server on init)
   private iceServers: RTCConfiguration = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -131,7 +131,29 @@ export class P2PManager {
     ]
   };
 
+  /**
+   * Fetch TURN/STUN ICE server configuration from the server.
+   * Falls back to hardcoded Google STUN servers if the request fails.
+   */
+  async fetchIceServers(apiBaseUrl: string): Promise<void> {
+    try {
+      // Strip /api/ws from wsUrl to get the API base
+      const base = apiBaseUrl.replace(/\/api\/ws(\/p2p)?$/, '');
+      const res = await fetch(`${base}/api/ice-servers`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ice_servers && data.ice_servers.length > 0) {
+          this.iceServers = { iceServers: data.ice_servers };
+        }
+      }
+    } catch {
+      // Keep default STUN servers
+    }
+  }
+
   init(username: string, wsUrl: string) {
+    // Fetch ICE server config from server (async — best effort)
+    this.fetchIceServers(wsUrl);
     this.username = username;
     this.online = navigator.onLine;
 

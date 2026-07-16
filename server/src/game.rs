@@ -15,6 +15,7 @@ pub struct TerritoryResponse {
     pub controlling_faction_id: Option<uuid::Uuid>,
     pub controlling_faction_name: Option<String>,
     pub defense_score: i32,
+    pub faction_influence: Option<i32>,
 }
 
 pub async fn get_territories(State(state): State<ServerState>) -> Json<Vec<TerritoryResponse>> {
@@ -33,7 +34,8 @@ pub async fn get_territories(State(state): State<ServerState>) -> Json<Vec<Terri
             t.name, 
             t.controlling_faction_id, 
             f.name as controlling_faction_name,
-            t.defense_score
+            t.defense_score,
+            f.influence as faction_influence
         FROM territories t
         LEFT JOIN factions f ON t.controlling_faction_id = f.id
         ORDER BY t.name ASC

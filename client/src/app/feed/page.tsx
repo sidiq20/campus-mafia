@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from 'react';
-import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search, BarChart3, Plus, X } from 'lucide-react';
+import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search, BarChart3, Plus, X, Target, AlertTriangle } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import PollCard from '@/components/PollCard';
 import type { PollData } from '@/components/PollCard';
+import { MentionAutocomplete } from '@/components/MentionAutocomplete';
 
 type Post = {
   id: string;
@@ -169,8 +170,22 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <header className="h-16 border-b border-green-500/30 flex items-center justify-between px-8 bg-black/60 backdrop-blur-md">
-        <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text">Global Feed // Live</h2>
+      <header className="h-16 border-b border-green-500/30 flex items-center gap-4 px-8 bg-black/60 backdrop-blur-md">
+        <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text shrink-0">Global Feed // Live</h2>
+        {user && (
+          <>
+            <span className="hidden sm:flex items-center gap-1 text-[10px] text-blue-500/70" title="Reputation">
+              <Target size={10} />
+              {user.reputation}
+            </span>
+            <span className={`hidden sm:flex items-center gap-1 text-[10px] ${
+              (user.heat_level || 0) > 70 ? 'text-red-500' : (user.heat_level || 0) > 40 ? 'text-yellow-500' : 'text-zinc-500'
+            }`} title="Heat Level">
+              <AlertTriangle size={10} />
+              {user.heat_level || 0}%
+            </span>
+          </>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -178,7 +193,7 @@ export default function Dashboard() {
               router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
             }
           }}
-          className="relative"
+          className="relative ml-auto"
         >
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
           <input
@@ -200,13 +215,13 @@ export default function Dashboard() {
 
           {/* Post Input */}
           <div className="p-6 border border-zinc-800 bg-black/60 backdrop-blur rounded-lg focus-within:border-green-500/50 transition-all duration-300 shadow-[0_0_20px_rgba(0,0,0,0.5)] animate-slide-in">
-            <textarea 
+            <MentionAutocomplete
               value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="w-full bg-transparent resize-none outline-none text-sm placeholder:text-zinc-600 text-zinc-100" 
+              onChange={setContent}
               placeholder="Broadcast encrypted intel..."
+              className="w-full bg-transparent resize-none outline-none text-sm placeholder:text-zinc-600 text-zinc-100"
               rows={3}
-            ></textarea>              {showPollBuilder && (
+            />              {showPollBuilder && (
                 <div className="mb-4 border border-purple-500/20 rounded-lg bg-purple-950/10 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest flex items-center gap-1"><BarChart3 size={12} /> Poll</span>
@@ -528,20 +543,20 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
               <span className="text-[9px] font-mono text-zinc-600 shrink-0">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             </div>
           ))}
-          <div className="flex gap-2 sm:gap-3 mt-4">              <input 
-              type="text" 
-              value={commentText}
-              onChange={e => setCommentText(e.target.value)}
-              placeholder="Add your intel..." 
-              className="flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded px-3 sm:px-4 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-200"
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (!commentText.trim() || commentSendingRef.current) return;
-                  commentMutation.mutate();
-                }
-              }}
-            />
+          <div className="flex gap-2 sm:gap-3 mt-4">              <MentionAutocomplete
+                value={commentText}
+                onChange={setCommentText}
+                placeholder="Add your intel..."
+                className="flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded px-3 sm:px-4 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-200"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!commentText.trim() || commentSendingRef.current) return;
+                    commentMutation.mutate();
+                  }
+                }}
+              />
             <button 
               onClick={() => {
                 if (!commentText.trim() || commentSendingRef.current) return;

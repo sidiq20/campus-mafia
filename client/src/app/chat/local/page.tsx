@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { MentionText } from '@/components/MentionText';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
-import { ArrowLeft, Send, Radio, MapIcon } from 'lucide-react';
+import { ArrowLeft, Send, Radio, MapIcon, User, Wifi } from 'lucide-react';
 import { p2pManager } from '@/lib/offline';
+import { apiFetch } from '@/lib/api';
 import PeerRadar from '@/components/PeerRadar';
+import { toast } from 'sonner';
 
 type LocalMessage = {
   from: string;
@@ -24,12 +27,25 @@ export default function LocalP2PChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Get online users from the server
+  const { data: onlineUsers = [] } = useQuery<string[]>({
+    queryKey: ['online-users'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/users/online');
+      return res.ok ? res.json() : [];
+    },
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+
+  // Filter out self from online users
+  const otherOnlineUsers = onlineUsers.filter(u => u !== user?.username);
+  const connectedPeers = p2pManager.getConnectedPeers();
+
   // Poll for new messages + peer count + start location sharing
   useEffect(() => {
-    // Start sharing location for radar map
     p2pManager.startLocationSharing();
     const peerPosInterval = setInterval(() => {
-      // Force re-render by reading peer positions
       p2pManager.getPeerPositions();
     }, 5000);
 
@@ -39,7 +55,6 @@ export default function LocalP2PChatPage() {
       setPeerCount(p2pManager.getConnectedPeers().length);
     }, 1000);
 
-    // Initial load
     setMessages([...p2pManager.getLocalMessages()]);
     setPeerCount(p2pManager.getConnectedPeers().length);
 
@@ -61,9 +76,13 @@ export default function LocalP2PChatPage() {
     if (!content.trim()) return;
     const sentCount = p2pManager.broadcastToPeers(content.trim());
     setContent('');
-    // Force update messages from history (our own broadcast is already added)
     setMessages([...p2pManager.getLocalMessages()]);
     inputRef.current?.focus();
+  };
+
+  const handleConnectToPeer = (username: string) => {
+    p2pManager.connectToPeer(username);
+    toast.info(`Connecting to @${username}...`);
   };
 
   return (
@@ -83,7 +102,7 @@ export default function LocalP2PChatPage() {
               <span className="absolute inset-0 bg-green-500 rounded-full" />
             </span>
             <span className="text-[10px] text-green-400/70">
-              {peerCount} peer{peerCount !== 1 ? 's' : ''} nearby
+              {peerCount} peer{peerCount !== 1 ? 's' : ''} connected
             </span>
             <span className="text-[9px] text-zinc-600">· P2P encrypted</span>
           </div>
@@ -100,6 +119,37 @@ export default function LocalP2PChatPage() {
       </header>
 
       <div className="flex-1 flex flex-col overflow-hidden bg-[#050505]">
+        {/* Online users bar - available for P2P connection */}
+        {otherOnlineUsers.length > 0 && (
+          <div className="px-4 py-2.5 border-b border-zinc-800 bg-black/30 flex items-center gap-2 overflow-x-auto">
+            <Wifi size={12} className="text-green-500 shrink-0" />
+            <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold shrink-0 mr-1">Online:</span>
+            {otherOnlineUsers.slice(0, 10).map(username => {
+              const isConnected = connectedPeers.includes(username);
+              return (
+                <button
+                  key={username}
+                  onClick={() => !isConnected && handleConnectToPeer(username)}
+                  disabled={isConnected}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all shrink-0 ${
+                    isConnected
+                      ? 'bg-green-500/10 text-green-400 border border-green-500/30 cursor-default'
+                      : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:bg-green-500/10 hover:text-green-400 hover:border-green-500/30 cursor-pointer'
+                  }`}
+                  title={isConnected ? 'Connected via P2P' : 'Click to connect via P2P'}
+                >
+                  <User size={10} />
+                  @{username}
+                  {isConnected && <Wifi size={10} className="text-green-500" />}
+                </button>
+              );
+            })}
+            {otherOnlineUsers.length > 10 && (
+              <span className="text-[9px] text-zinc-600 shrink-0">+{otherOnlineUsers.length - 10} more</span>
+            )}
+          </div>
+        )}
+
         {/* Radar map */}
         {showRadar && (
           <div className="p-4 border-b border-zinc-800">
@@ -115,7 +165,9 @@ export default function LocalP2PChatPage() {
               <p className="text-[10px] text-zinc-700 mt-2">
                 {peerCount > 0
                   ? `Connected to ${peerCount} peer${peerCount > 1 ? 's' : ''} — send a message to the local area!`
-                  : 'Waiting for nearby operatives to connect...'}
+                  : otherOnlineUsers.length > 0
+                    ? `${otherOnlineUsers.length} operative${otherOnlineUsers.length > 1 ? 's' : ''} online — click a name above to connect via P2P`
+                    : 'Waiting for nearby operatives to connect...'}
               </p>
             </div>
           ) : (
@@ -173,7 +225,9 @@ export default function LocalP2PChatPage() {
           </div>
           {peerCount === 0 && (
             <p className="text-[9px] text-zinc-600 mt-2 text-center">
-              Connect to other operatives via P2P to start local area chatting
+              {otherOnlineUsers.length > 0
+                ? 'Click an online operative above to establish a P2P connection'
+                : 'No other operatives are currently online'}
             </p>
           )}
         </div>

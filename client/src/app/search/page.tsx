@@ -210,7 +210,7 @@ function SearchPageContent() {
 
   return (
     <DashboardLayout>
-      <header className="border-b border-green-500/30 bg-black/60 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-green-500/30 bg-black/60 backdrop-blur-md">
         <div className="flex items-center gap-4 px-4 sm:px-8 h-16">
           <Link href="/feed" className="text-zinc-500 hover:text-green-400 transition-colors shrink-0">
             <ArrowLeft size={20} />

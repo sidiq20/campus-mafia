@@ -8,7 +8,7 @@ import { MentionText } from '@/components/MentionText';
 import { apiFetch, WS_URL } from '@/lib/api';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
-import { Send, ArrowLeft, Users, X, UserPlus, Crown, ShieldAlert, Trash2 } from 'lucide-react';
+import { Send, ArrowLeft, Users, X, UserPlus, Crown, ShieldAlert, Trash2, Edit3, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 type GroupMessage = {
@@ -29,6 +29,16 @@ type GroupMember = {
   joined_at: string;
 };
 
+type GroupData = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_by: string;
+  created_by_name: string;
+  member_count: number | null;
+  created_at: string;
+};
+
 export default function GroupChatPage() {
   const { id } = useParams() as { id: string };
   const { user } = useUser();
@@ -37,7 +47,20 @@ export default function GroupChatPage() {
   const [showMembers, setShowMembers] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [sendingLock, setSendingLock] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: group } = useQuery<GroupData>({
+    queryKey: ['group', id],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/groups/${id}`);
+      if (!res.ok) throw new Error('Failed to load group');
+      return res.json();
+    },
+    staleTime: 15_000,
+  });
 
   const { data: messages, refetch } = useQuery<GroupMessage[]>({
     queryKey: ['group-chat', id],
@@ -83,6 +106,25 @@ export default function GroupChatPage() {
     }
   });
 
+  const updateGroupMutation = useMutation({
+    mutationFn: async (data: { name?: string; description?: string }) => {
+      const res = await apiFetch(`/api/groups/${id}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success('Group updated!');
+      setEditing(false);
+      queryClient.invalidateQueries({ queryKey: ['group', id] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+    },
+    onError: (err: Error) => toast.error(err.message)
+  });
+
   const addMemberMutation = useMutation({
     mutationFn: async (username: string) => {
       const res = await apiFetch(`/api/groups/${id}/members/add`, {
@@ -124,7 +166,7 @@ export default function GroupChatPage() {
     onError: (err: Error) => toast.error(err.message)
   });
 
-  // ——— WebSocket for real-time updates ———
+  // WebSocket for real-time updates
   useEffect(() => {
     if (!user) return;
     const ws = new WebSocket(`${WS_URL}/api/ws`);
@@ -135,7 +177,6 @@ export default function GroupChatPage() {
         if (data.type === 'GroupChatMessage' && data.group_id === id) {
           queryClient.setQueryData<GroupMessage[]>(['group-chat', id], (old) => {
             if (!old) return old;
-            // Avoid duplicates from polling + WS using the real DB id
             if (data.id && old.some(m => m.id === data.id)) return old;
             const newMsg: GroupMessage = {
               id: data.id || `ws-${Date.now()}`,
@@ -169,6 +210,27 @@ export default function GroupChatPage() {
     sendMutation.mutate(content.trim());
   };
 
+  const startEditing = () => {
+    setEditName(group?.name || '');
+    setEditDescription(group?.description || '');
+    setEditing(true);
+  };
+
+  const saveEdit = () => {
+    const updates: { name?: string; description?: string } = {};
+    if (editName.trim() && editName.trim() !== group?.name) {
+      updates.name = editName.trim();
+    }
+    if (editDescription !== (group?.description || '')) {
+      updates.description = editDescription;
+    }
+    if (Object.keys(updates).length === 0) {
+      setEditing(false);
+      return;
+    }
+    updateGroupMutation.mutate(updates);
+  };
+
   return (
     <DashboardLayout>
       <header className="h-16 border-b border-green-500/30 flex items-center gap-3 px-4 sm:px-8 bg-black/60 backdrop-blur-md">
@@ -176,10 +238,51 @@ export default function GroupChatPage() {
           <ArrowLeft size={20} />
         </Link>
         <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text truncate flex items-center gap-2">
-            <Users size={14} className="text-purple-400" />
-            Group Chat
-          </h2>
+          {editing ? (
+            <div className="flex items-center gap-2">
+              <input
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm font-bold text-green-500 outline-none focus:border-green-500/50 w-40"
+                placeholder="Group name"
+                maxLength={50}
+              />
+              <button
+                onClick={saveEdit}
+                disabled={updateGroupMutation.isPending}
+                className="p-1.5 text-green-500 hover:text-green-400 transition-colors disabled:opacity-50"
+                title="Save"
+              >
+                <Save size={14} />
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="p-1.5 text-zinc-500 hover:text-zinc-400 transition-colors"
+                title="Cancel"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text truncate flex items-center gap-2">
+                <Users size={14} className="text-purple-400" />
+                {group?.name || 'Group Chat'}
+                {isAdmin && (
+                  <button
+                    onClick={startEditing}
+                    className="p-1 text-zinc-600 hover:text-green-400 transition-colors"
+                    title="Edit group"
+                  >
+                    <Edit3 size={12} />
+                  </button>
+                )}
+              </h2>
+              {group?.description && !editing && (
+                <p className="text-[10px] text-zinc-500 truncate mt-0.5">{group.description}</p>
+              )}
+            </>
+          )}
         </div>
         <button
           onClick={() => setShowMembers(!showMembers)}
@@ -247,57 +350,118 @@ export default function GroupChatPage() {
         {/* Members sidebar */}
         {showMembers && (
           <div className="w-full md:w-72 border-t md:border-t-0 md:border-l border-zinc-800 bg-black/40 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-zinc-800">
+            {/* Header with close button */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
               <h3 className="text-xs font-bold text-purple-400 uppercase tracking-widest flex items-center gap-2">
-                <Users size={14} /> Members ({members?.length || 0})
+                <Users size={14} /> Members <span className="text-zinc-600 font-mono normal-case">({members?.length || 0})</span>
               </h3>
+              <button
+                onClick={() => setShowMembers(false)}
+                className="md:hidden p-1 text-zinc-600 hover:text-zinc-400 transition-colors"
+                title="Close"
+              >
+                <X size={14} />
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {members?.map(m => {
-                const isSelf = m.user_id === user?.id;
-                return (
-                  <div key={m.user_id} className="flex items-center justify-between p-2.5 bg-zinc-900/50 border border-zinc-800/50 rounded-lg">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <Link href={`/profile/${m.username}`} className="text-xs font-bold text-zinc-200 hover:text-green-400 truncate transition-colors">
-                          {m.display_name}
-                        </Link>
-                        {m.role === 'admin' && (
-                          <Crown size={10} className="text-yellow-500 shrink-0" />
+
+            {editing && (
+              <div className="px-4 py-3 border-b border-zinc-800/50 bg-zinc-900/20">
+                <label className="text-[9px] text-zinc-500 uppercase tracking-widest block mb-1">Description</label>
+                <textarea
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                  className="w-full bg-black border border-zinc-800 rounded px-3 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-300 resize-none"
+                  rows={2}
+                  maxLength={500}
+                  placeholder="Group description..."
+                />
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-[8px] text-zinc-600">{editDescription.length}/500</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setEditing(false)}
+                      className="text-[9px] text-zinc-500 hover:text-zinc-400 uppercase tracking-widest transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      disabled={updateGroupMutation.isPending}
+                      className="text-[9px] font-bold text-green-500 hover:text-green-400 uppercase tracking-widest transition-colors disabled:opacity-50"
+                    >
+                      {updateGroupMutation.isPending ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto">
+              {members?.length === 0 ? (
+                <div className="px-4 py-8 text-center text-[10px] text-zinc-600">No members yet</div>
+              ) : (
+                <div className="divide-y divide-zinc-800/40">
+                  {members?.map(m => {
+                    const isSelf = m.user_id === user?.id;
+                    return (
+                      <div key={m.user_id} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-900/40 transition-colors">
+                        {/* Avatar */}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                          m.role === 'admin' 
+                            ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30' 
+                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                        }`}>
+                          {m.display_name.charAt(0).toUpperCase()}
+                        </div>
+                        {/* Name and username */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <Link href={`/profile/${m.username}`} className="text-sm font-bold text-zinc-200 hover:text-green-400 truncate transition-colors">
+                              {m.display_name}
+                            </Link>
+                            {m.role === 'admin' && (
+                              <span className="text-[8px] text-yellow-500/70 font-bold uppercase tracking-wider border border-yellow-500/20 px-1 py-0.5 rounded shrink-0">Admin</span>
+                            )}
+                            {isSelf && (
+                              <span className="text-[8px] text-zinc-600">you</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-zinc-500">@{m.username}</div>
+                        </div>
+                        {/* Admin actions */}
+                        {isAdmin && !isSelf && m.role !== 'admin' && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => promoteMutation.mutate(m.user_id)}
+                              className="p-1.5 text-zinc-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded transition-all"
+                              title="Promote to admin"
+                            >
+                              <ShieldAlert size={13} />
+                            </button>
+                            <button
+                              onClick={() => removeMemberMutation.mutate(m.user_id)}
+                              className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-all"
+                              title="Remove member"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         )}
                       </div>
-                      <div className="text-[9px] text-zinc-600">@{m.username}</div>
-                    </div>
-                    {isAdmin && !isSelf && m.role !== 'admin' && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={() => promoteMutation.mutate(m.user_id)}
-                          className="p-1 text-zinc-500 hover:text-yellow-400 transition-colors"
-                          title="Promote to admin"
-                        >
-                          <ShieldAlert size={12} />
-                        </button>
-                        <button
-                          onClick={() => removeMemberMutation.mutate(m.user_id)}
-                          className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
-                          title="Remove member"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
             {isAdmin && (
-              <div className="p-4 border-t border-zinc-800">
+              <div className="p-3 border-t border-zinc-800 bg-black/20">
                 <div className="flex gap-2">
                   <input
                     value={newMemberName}
                     onChange={e => setNewMemberName(e.target.value)}
                     placeholder="Add username..."
-                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs outline-none focus:border-purple-500/50 text-zinc-200"
+                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs outline-none focus:border-purple-500/50 text-zinc-200 placeholder-zinc-600"
                     onKeyDown={e => {
                       if (e.key === 'Enter' && newMemberName.trim()) {
                         addMemberMutation.mutate(newMemberName.trim());
@@ -307,7 +471,7 @@ export default function GroupChatPage() {
                   <button
                     onClick={() => newMemberName.trim() && addMemberMutation.mutate(newMemberName.trim())}
                     disabled={!newMemberName.trim()}
-                    className="p-2 border border-purple-500/40 bg-purple-500/10 text-purple-400 rounded hover:bg-purple-500/20 disabled:opacity-50 transition-all"
+                    className="px-3 py-2 border border-purple-500/40 bg-purple-500/10 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/20 disabled:opacity-50 transition-all"
                   >
                     <UserPlus size={14} />
                   </button>

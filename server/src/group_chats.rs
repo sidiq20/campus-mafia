@@ -10,6 +10,7 @@ use crate::{ServerState, auth::AuthUser};
 pub struct GroupChat {
     pub id: uuid::Uuid,
     pub name: String,
+    pub description: Option<String>,
     pub created_by: uuid::Uuid,
     pub created_by_name: String,
     pub member_count: Option<i64>,
@@ -76,10 +77,10 @@ pub async fn create_group(
         WITH inserted AS (
             INSERT INTO group_chats (name, created_by)
             VALUES ($1, $2)
-            RETURNING id, name, created_by, created_at
+            RETURNING id, name, COALESCE(description, '') as description, created_by, created_at
         )
         SELECT 
-            i.id, i.name, i.created_by,
+            i.id, i.name, i.description, i.created_by,
             COALESCE(u.display_name, 'Unknown') as created_by_name,
             1::bigint as member_count,
             i.created_at
@@ -140,7 +141,7 @@ pub async fn get_my_groups(
     let groups = sqlx::query_as::<_, GroupChat>(
         r#"
         SELECT 
-            g.id, g.name, g.created_by,
+            g.id, g.name, COALESCE(g.description, '') as description, g.created_by,
             COALESCE(u.display_name, 'Unknown') as created_by_name,
             (SELECT COUNT(*) FROM group_chat_members gm WHERE gm.group_id = g.id) as member_count,
             g.created_at
@@ -402,6 +403,158 @@ pub async fn send_group_message(
     }
 
     Ok(Json(msg))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateGroupRequest {
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
+/// Get a single group's details (including description)
+pub async fn get_group(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(group_id): Path<uuid::Uuid>,
+) -> Result<Json<GroupChat>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    // Verify membership
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_chat_members WHERE group_id = $1 AND user_id = $2)"
+    )
+    .bind(group_id)
+    .bind(auth_user.user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
+
+    if !is_member {
+        return Err((StatusCode::FORBIDDEN, "Not a member of this group".to_string()));
+    }
+
+    let group = sqlx::query_as::<_, GroupChat>(
+        r#"
+        SELECT 
+            g.id, g.name, COALESCE(g.description, '') as description, g.created_by,
+            COALESCE(u.display_name, 'Unknown') as created_by_name,
+            (SELECT COUNT(*) FROM group_chat_members gm WHERE gm.group_id = g.id) as member_count,
+            g.created_at
+        FROM group_chats g
+        JOIN users u ON g.created_by = u.id
+        WHERE g.id = $1
+        "#
+    )
+    .bind(group_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Group not found".to_string()))?;
+
+    Ok(Json(group))
+}
+
+/// Update group name and/or description (admin only)
+pub async fn update_group(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(group_id): Path<uuid::Uuid>,
+    Json(payload): Json<UpdateGroupRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    // Check admin
+    let role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM group_chat_members WHERE group_id = $1 AND user_id = $2"
+    )
+    .bind(group_id)
+    .bind(auth_user.user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    if role.as_deref() != Some("admin") {
+        return Err((StatusCode::FORBIDDEN, "Only admins can update the group".to_string()));
+    }
+
+    // Build dynamic UPDATE query with parameterized binds
+    let mut set_clauses = Vec::new();
+    let mut bind_idx = 2;
+
+    if let Some(ref name) = payload.name {
+        if name.trim().is_empty() {
+            return Err((StatusCode::BAD_REQUEST, "Group name cannot be empty".to_string()));
+        }
+        if name.len() > 50 {
+            return Err((StatusCode::BAD_REQUEST, "Group name too long (max 50)".to_string()));
+        }
+        set_clauses.push(format!("name = ${}", bind_idx));
+        bind_idx += 1;
+    }
+    if let Some(ref description) = payload.description {
+        if description.len() > 500 {
+            return Err((StatusCode::BAD_REQUEST, "Description too long (max 500)".to_string()));
+        }
+        set_clauses.push(format!("description = ${}", bind_idx));
+        bind_idx += 1;
+    }
+
+    if set_clauses.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "No fields to update".to_string()));
+    }
+
+    let query_str = format!(
+        "UPDATE group_chats SET {} WHERE id = $1",
+        set_clauses.join(", ")
+    );
+
+    let mut query = sqlx::query(&query_str).bind(group_id);
+
+    if let Some(ref name) = payload.name {
+        query = query.bind(name);
+    }
+    if let Some(ref description) = payload.description {
+        query = query.bind(description);
+    }
+
+    query
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Return updated group
+    let group = sqlx::query_as::<_, GroupChat>(
+        r#"
+        SELECT 
+            g.id, g.name, COALESCE(g.description, '') as description, g.created_by,
+            COALESCE(u.display_name, 'Unknown') as created_by_name,
+            (SELECT COUNT(*) FROM group_chat_members gm WHERE gm.group_id = g.id) as member_count,
+            g.created_at
+        FROM group_chats g
+        JOIN users u ON g.created_by = u.id
+        WHERE g.id = $1
+        "#
+    )
+    .bind(group_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    match group {
+        Some(g) => Ok(Json(serde_json::json!({
+            "status": "updated",
+            "group": {
+                "id": g.id,
+                "name": g.name,
+                "created_by": g.created_by,
+                "created_by_name": g.created_by_name,
+                "member_count": g.member_count,
+                "created_at": g.created_at,
+            }
+        }))),
+        None => Err((StatusCode::NOT_FOUND, "Group not found".to_string())),
+    }
 }
 
 /// Get messages for a group

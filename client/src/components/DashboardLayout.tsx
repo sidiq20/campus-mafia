@@ -32,7 +32,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return res.ok ? res.json() : [];
     },
     enabled: !!user,
-    staleTime: 30_000,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
   });
 
   const { data: dmUnread } = useQuery<{unread: number}>({
@@ -131,55 +132,90 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, [user?.username]);
 
+  // WebSocket with auto-reconnection
   useEffect(() => {
-    const ws = new WebSocket(`${WS_URL}/api/ws`);
-    wsRef.current = ws;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 10;
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        // Track typing indicators for the cat
-        if (data.type === 'TypingIndicator') {
-          setTypingFriends(prev => {
-            if (data.is_typing) {
-              if (prev.includes(data.from_username)) return prev;
-              return [...prev, data.from_username];
-            }
-            return prev.filter(n => n !== data.from_username);
-          });
-          return;
+    function connect() {
+      const ws = new WebSocket(`${WS_URL}/api/ws`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        reconnectAttempts = 0; // Reset on successful connection
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Track typing indicators for the cat
+          if (data.type === 'TypingIndicator') {
+            setTypingFriends(prev => {
+              if (data.is_typing) {
+                if (prev.includes(data.from_username)) return prev;
+                return [...prev, data.from_username];
+              }
+              return prev.filter(n => n !== data.from_username);
+            });
+            return;
+          }
+          setMessages(prev => [...prev, data]);
+          
+          let title = '';
+          let body = '';
+          if (data.type === 'NewPost') { title = 'Intel Drop'; body = `@${data.author} broadcasted a message.`; toast(title, { description: body }); }
+          if (data.type === 'TerritoryAttacked') { title = 'Attack Detected'; body = `${data.territory_name} was hit!`; toast.error(title, { description: body }); }
+          if (data.type === 'TerritoryCaptured') { title = 'Territory Captured'; body = `${data.territory_name} was taken!`; toast.success(title, { description: body }); }
+          if (data.type === 'RaidPlanned') { title = 'Raid Planned'; body = `@${data.planner_name} planned a raid on ${data.target_territory}!`; toast.info(title, { description: body }); }
+          if (data.type === 'RaidJoined') { title = 'Raid Joined'; body = `@${data.joiner_name} joined the raid on ${data.target_territory}!`; toast.info(title, { description: body }); }
+          if (data.type === 'RaidExecuted') { title = 'Raid Executed'; body = data.captured ? `${data.target_territory} was captured by ${data.faction_name}!` : `${data.target_territory} was hit for ${data.total_influence} damage!`; toast.success(title, { description: body }); }
+          if (data.type === 'Notification' && data.target_username === user?.username) {
+            title = data.from ? `DM from ${data.from}` : 'New Message';
+            body = 'You have a new direct message';
+            toast.info(body, { description: data.from ? `From: ${data.from}` : undefined });
+            playNotificationSound();
+            // Also invalidate notifications badge so the red dot updates
+            queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            queryClient.invalidateQueries({ queryKey: ['dm-unread'] });
+          }
+          
+          // Show browser notification regardless of tab visibility
+          if (title && "Notification" in window && Notification.permission === "granted") {
+            try {
+              new Notification(title, { body, tag: 'deptos-live' });
+            } catch (_) {}
+          }
+        } catch (e) {
+          // Fallback
         }
-        setMessages(prev => [...prev, data]);
-        
-        let title = '';
-        let body = '';
-        if (data.type === 'NewPost') { title = 'Intel Drop'; body = `@${data.author} broadcasted a message.`; toast(title, { description: body }); }
-        if (data.type === 'TerritoryAttacked') { title = 'Attack Detected'; body = `${data.territory_name} was hit!`; toast.error(title, { description: body }); }
-        if (data.type === 'TerritoryCaptured') { title = 'Territory Captured'; body = `${data.territory_name} was taken!`; toast.success(title, { description: body }); }
-        if (data.type === 'RaidPlanned') { title = 'Raid Planned'; body = `@${data.planner_name} planned a raid on ${data.target_territory}!`; toast.info(title, { description: body }); }
-        if (data.type === 'RaidJoined') { title = 'Raid Joined'; body = `@${data.joiner_name} joined the raid on ${data.target_territory}!`; toast.info(title, { description: body }); }
-        if (data.type === 'RaidExecuted') { title = 'Raid Executed'; body = data.captured ? `${data.target_territory} was captured by ${data.faction_name}!` : `${data.target_territory} was hit for ${data.total_influence} damage!`; toast.success(title, { description: body }); }
-        if (data.type === 'Notification' && data.target_username === user?.username) {
-          title = data.from ? `DM from ${data.from}` : 'New Message';
-          body = 'You have a new direct message';
-          toast.info(body, { description: data.from ? `From: ${data.from}` : undefined });
-          playNotificationSound();
-          // Also invalidate notifications badge so the red dot updates
-          queryClient.invalidateQueries({ queryKey: ['notifications'] });
-          queryClient.invalidateQueries({ queryKey: ['dm-unread'] });
+      };
+
+      ws.onclose = () => {
+        wsRef.current = null;
+        // Reconnect with exponential backoff (1s, 2s, 4s, 8s, ... max 30s)
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+          reconnectAttempts++;
+          reconnectTimeout = setTimeout(connect, delay);
         }
-        
-        if (title && "Notification" in window && Notification.permission === "granted" && document.hidden) {
-          new Notification(title, { body });
-        }
-      } catch (e) {
-        // Fallback
-      }
-    };
+      };
+
+      ws.onerror = () => {
+        // onclose will fire after onerror, so just close to trigger reconnect
+        ws.close();
+      };
+    }
+
+    connect();
 
     return () => {
-      ws.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (wsRef.current) {
+        wsRef.current.onclose = null; // Prevent reconnect on unmount
+        wsRef.current.close();
+      }
     };
   }, []);
 
@@ -219,7 +255,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <button onClick={() => setIsRightOpen(true)}><Bell className="text-green-500 w-6 h-6" /></button>
       </div>
 
-      <aside ref={sidebarRef} className={`w-64 border-r border-green-500/20 bg-black p-4 flex flex-col gap-6 fixed inset-y-0 left-0 z-40 transform transition-transform md:relative md:translate-x-0 pb-20 md:pb-4 ${isLeftOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside ref={sidebarRef} className={`w-64 border-r border-green-500/20 bg-black p-4 flex flex-col gap-6 fixed inset-y-0 left-0 z-40 transform transition-transform md:relative md:translate-x-0 pb-20 md:pb-4 overflow-y-auto ${isLeftOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <button className="md:hidden absolute top-4 right-4" onClick={() => setIsLeftOpen(false)}><X className="text-zinc-500 w-5 h-5"/></button>
         <div className="flex items-center gap-2 mb-4">
           <Skull className="text-green-500 h-6 w-6" />

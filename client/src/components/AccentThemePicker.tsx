@@ -3,33 +3,134 @@
 import { useEffect, useState } from 'react';
 import { Palette } from 'lucide-react';
 
-const THEMES = [
-  { name: 'Hacker Green', color: '#22c55e', css: '160, 200, 80', key: 'green' },
-  { name: 'Cyber Red', color: '#ef4444', css: '239, 68, 68', key: 'red' },
-  { name: 'Neon Purple', color: '#a855f7', css: '168, 85, 247', key: 'purple' },
-  { name: 'Electric Blue', color: '#3b82f6', css: '59, 130, 246', key: 'blue' },
-  { name: 'Toxic Cyan', color: '#06b6d4', css: '6, 182, 212', key: 'cyan' },
-  { name: 'Amber', color: '#f59e0b', css: '245, 158, 11', key: 'amber' },
+type ThemeVars = Record<string, string>;
+
+interface Theme {
+  name: string;
+  color: string;
+  key: string;
+  vars: ThemeVars;
+}
+
+const THEMES: Theme[] = [
+  {
+    name: 'Hacker Green',
+    color: '#22c55e',
+    key: 'green',
+    vars: {
+      '--primary': '#22c55e',
+      '--ring': '#22c55e',
+      '--border': 'rgba(34, 197, 94, 0.2)',
+      '--foreground': '#22c55e',
+      '--card-foreground': '#22c55e',
+      '--secondary-foreground': '#22c55e',
+      '--muted-foreground': '#15803d',
+      '--primary-foreground': '#000000',
+    },
+  },
+  {
+    name: 'Cyber Red',
+    color: '#ef4444',
+    key: 'red',
+    vars: {
+      '--primary': '#ef4444',
+      '--ring': '#ef4444',
+      '--border': 'rgba(239, 68, 68, 0.2)',
+      '--foreground': '#ef4444',
+      '--card-foreground': '#ef4444',
+      '--secondary-foreground': '#ef4444',
+      '--muted-foreground': '#991b1b',
+      '--primary-foreground': '#000000',
+    },
+  },
+  {
+    name: 'Neon Purple',
+    color: '#a855f7',
+    key: 'purple',
+    vars: {
+      '--primary': '#a855f7',
+      '--ring': '#a855f7',
+      '--border': 'rgba(168, 85, 247, 0.2)',
+      '--foreground': '#a855f7',
+      '--card-foreground': '#a855f7',
+      '--secondary-foreground': '#a855f7',
+      '--muted-foreground': '#7e22ce',
+      '--primary-foreground': '#000000',
+    },
+  },
+  {
+    name: 'Electric Blue',
+    color: '#3b82f6',
+    key: 'blue',
+    vars: {
+      '--primary': '#3b82f6',
+      '--ring': '#3b82f6',
+      '--border': 'rgba(59, 130, 246, 0.2)',
+      '--foreground': '#3b82f6',
+      '--card-foreground': '#3b82f6',
+      '--secondary-foreground': '#3b82f6',
+      '--muted-foreground': '#1d4ed8',
+      '--primary-foreground': '#000000',
+    },
+  },
+  {
+    name: 'Toxic Cyan',
+    color: '#06b6d4',
+    key: 'cyan',
+    vars: {
+      '--primary': '#06b6d4',
+      '--ring': '#06b6d4',
+      '--border': 'rgba(6, 182, 212, 0.2)',
+      '--foreground': '#06b6d4',
+      '--card-foreground': '#06b6d4',
+      '--secondary-foreground': '#06b6d4',
+      '--muted-foreground': '#0e7490',
+      '--primary-foreground': '#000000',
+    },
+  },
+  {
+    name: 'Amber',
+    color: '#f59e0b',
+    key: 'amber',
+    vars: {
+      '--primary': '#f59e0b',
+      '--ring': '#f59e0b',
+      '--border': 'rgba(245, 158, 11, 0.2)',
+      '--foreground': '#f59e0b',
+      '--card-foreground': '#f59e0b',
+      '--secondary-foreground': '#f59e0b',
+      '--muted-foreground': '#b45309',
+      '--primary-foreground': '#000000',
+    },
+  },
 ];
+
+function applyTheme(themeKey: string) {
+  const theme = THEMES.find(t => t.key === themeKey);
+  if (!theme) return;
+
+  const root = document.documentElement;
+  for (const [prop, value] of Object.entries(theme.vars)) {
+    root.style.setProperty(prop, value);
+  }
+  localStorage.setItem('accent-theme', themeKey);
+}
 
 export default function AccentThemePicker() {
   const [open, setOpen] = useState(false);
   const [accent, setAccent] = useState('green');
 
+  // Load saved theme on mount and apply immediately
   useEffect(() => {
     const saved = localStorage.getItem('accent-theme');
-    if (saved && THEMES.some(t => t.key === saved)) {
-      setAccent(saved);
-    }
+    const initial = saved && THEMES.some(t => t.key === saved) ? saved : 'green';
+    setAccent(initial);
+    applyTheme(initial);
   }, []);
 
+  // Apply theme whenever accent changes
   useEffect(() => {
-    const theme = THEMES.find(t => t.key === accent);
-    if (theme) {
-      document.documentElement.style.setProperty('--accent-color', theme.color);
-      document.documentElement.style.setProperty('--accent-rgb', theme.css);
-      localStorage.setItem('accent-theme', accent);
-    }
+    applyTheme(accent);
   }, [accent]);
 
   return (

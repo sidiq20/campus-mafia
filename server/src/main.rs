@@ -618,11 +618,13 @@ async fn main() {
 
         // Group Chats
         .route("/api/groups", axum::routing::post(group_chats::create_group).get(group_chats::get_my_groups))
+        .route("/api/groups/:id", get(group_chats::get_group))
         .route("/api/groups/:id/members", get(group_chats::get_group_members))
         .route("/api/groups/:id/members/add", axum::routing::post(group_chats::add_group_member))
         .route("/api/groups/:id/members/:user_id/remove", axum::routing::post(group_chats::remove_group_member))
         .route("/api/groups/:id/members/:user_id/promote", axum::routing::post(group_chats::promote_to_admin))
         .route("/api/groups/:id/messages", axum::routing::post(group_chats::send_group_message).get(group_chats::get_group_messages))
+        .route("/api/groups/:id/update", axum::routing::post(group_chats::update_group))
 
         // Multi-device Sync
         .route("/api/sync", get(sync::sync_data))

@@ -2,7 +2,7 @@
 
 import DashboardLayout from '@/components/DashboardLayout';
 import { apiFetch } from '@/lib/api';
-import { Shield, Users, Bomb, Clock, UserPlus, Zap, X, Swords, ChevronDown, ChevronRight, Radio, MapPin, Crosshair, LayoutGrid, Map as MapIcon } from 'lucide-react';
+import { Shield, Users, Bomb, Clock, UserPlus, Zap, X, Swords, ChevronDown, ChevronRight, Radio, MapPin, Crosshair, LayoutGrid, Map as MapIcon, AlertTriangle, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/contexts/UserContext';
@@ -33,6 +33,7 @@ type Territory = {
   controlling_faction_id: string | null;
   controlling_faction_name: string | null;
   defense_score: number;
+  faction_influence: number | null;
 };
 
 type InventoryItem = {
@@ -563,6 +564,21 @@ export default function TerritoryPage() {
               {b.label} x{b.qty}
             </span>
           ))}
+          {/* Reputation & Heat Level */}
+          {user && (
+            <>
+              <span className="hidden sm:flex items-center gap-1 text-[10px] text-blue-500/70" title="Reputation">
+                <Target size={10} />
+                {user.reputation}
+              </span>
+              <span className={`hidden sm:flex items-center gap-1 text-[10px] ${
+                (user.heat_level || 0) > 70 ? 'text-red-500' : (user.heat_level || 0) > 40 ? 'text-yellow-500' : 'text-zinc-500'
+              }`} title="Heat Level">
+                <AlertTriangle size={10} />
+                {user.heat_level || 0}%
+              </span>
+            </>
+          )}
           {/* Live indicator */}
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
@@ -750,10 +766,15 @@ export default function TerritoryPage() {
                     />
                   </div>
 
-                  {/* Faction territory count */}
+                  {/* Faction info */}
                   {t.controlling_faction_name && (
-                    <div className="text-[9px] text-zinc-600 mb-4">
-                      {factionTerritories[t.controlling_faction_name] || 0} zone{(factionTerritories[t.controlling_faction_name] || 0) !== 1 ? 's' : ''} controlled
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-[9px] text-zinc-600">
+                        {factionTerritories[t.controlling_faction_name] || 0} zone{(factionTerritories[t.controlling_faction_name] || 0) !== 1 ? 's' : ''} controlled
+                      </div>
+                      <div className="text-[9px] text-yellow-500 font-mono font-bold">
+                        {t.faction_influence?.toLocaleString() || '?'} INF
+                      </div>
                     </div>
                   )}
 

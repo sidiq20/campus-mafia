@@ -320,7 +320,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <>
               <Link href="/profile" className="font-bold text-green-400 hover:text-green-300 transition-colors">@{user.username}</Link>
               <button 
-                onClick={() => {
+                onClick={async () => {
+                  // Clear server-side httpOnly cookie first
+                  await apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
                   clearToken();
                   queryClient.clear();
                   window.location.href = '/login';

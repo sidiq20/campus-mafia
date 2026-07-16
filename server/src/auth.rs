@@ -23,7 +23,7 @@ pub struct Claims {
 pub fn create_jwt(user_id: uuid::Uuid) -> Result<String, String> {
     let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "secret".into());
     let expiration = chrono::Utc::now()
-        .checked_add_signed(chrono::Duration::days(7))
+        .checked_add_signed(chrono::Duration::days(30))
         .expect("valid timestamp")
         .timestamp() as usize;
 
@@ -169,7 +169,7 @@ fn add_jwt_cookie(jar: CookieJar, token: &str) -> CookieJar {
         .http_only(true)
         .secure(true)
         .same_site(SameSite::None)
-        .max_age(time::Duration::days(7))
+        .max_age(time::Duration::days(30))
         .build();
     jar.add(cookie)
 }

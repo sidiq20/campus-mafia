@@ -17,6 +17,7 @@ export function clearToken() {
 }
 
 // Authenticated fetch wrapper — automatically adds Authorization header
+// Also sends httpOnly JWT cookie for PWA session persistence across app restarts.
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -25,5 +26,9 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  return fetch(`${API_URL}${path}`, { ...options, headers });
+  return fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: 'include', // Send httpOnly jwt cookie so server can fall back to it
+  });
 }

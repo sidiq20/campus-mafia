@@ -134,11 +134,19 @@ export class P2PManager {
   /**
    * Fetch TURN/STUN ICE server configuration from the server.
    * Falls back to hardcoded Google STUN servers if the request fails.
+   *
+   * @param wsUrl - The WebSocket URL (e.g. wss://domain.com or wss://domain.com/api/ws)
    */
-  async fetchIceServers(apiBaseUrl: string): Promise<void> {
+  async fetchIceServers(wsUrl: string): Promise<void> {
     try {
-      // Strip /api/ws from wsUrl to get the API base
-      const base = apiBaseUrl.replace(/\/api\/ws(\/p2p)?$/, '');
+      // Convert wss:// -> https:// and ws:// -> http:// so fetch() works
+      const httpBase = wsUrl.startsWith('wss://')
+        ? 'https://' + wsUrl.slice(6)
+        : wsUrl.startsWith('ws://')
+          ? 'http://' + wsUrl.slice(5)
+          : wsUrl;
+      // Strip trailing /api/ws or /api/ws/p2p to get the API root
+      const base = httpBase.replace(/\/api\/ws(\/p2p)?$/, '');
       const res = await fetch(`${base}/api/ice-servers`);
       if (res.ok) {
         const data = await res.json();

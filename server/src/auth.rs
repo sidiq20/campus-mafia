@@ -686,13 +686,11 @@ pub async fn repost_post(
         return Err((StatusCode::NOT_FOUND, "Post not found".to_string()));
     }
 
-    // Toggle repost (insert or delete)
-    let result = sqlx::query(
+    // Toggle repost: delete if exists, otherwise insert
+    let delete_result = sqlx::query(
         r#"
-        INSERT INTO reposts (user_id, post_id)
-        VALUES ($1, $2)
-        ON CONFLICT (user_id, post_id)
-        DO DELETE
+        DELETE FROM reposts
+        WHERE user_id = $1 AND post_id = $2
         "#
     )
     .bind(auth_user.user_id)
@@ -701,7 +699,24 @@ pub async fn repost_post(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let action = if result.rows_affected() == 1 { "reposted" } else { "unreposted" };
+    let action = if delete_result.rows_affected() > 0 {
+        "unreposted".to_string()
+    } else {
+        // No existing repost — insert one
+        sqlx::query(
+            r#"
+            INSERT INTO reposts (user_id, post_id)
+            VALUES ($1, $2)
+            "#
+        )
+        .bind(auth_user.user_id)
+        .bind(post_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        "reposted".to_string()
+    };
     Ok(Json(serde_json::json!({"status": action})))
 }
 

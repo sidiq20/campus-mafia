@@ -93,6 +93,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isLeftOpen]);
 
+  // Typing notification throttle — avoid spamming "user is typing" toasts
+  const typingNotifThrottleRef = useRef<Map<string, number>>(new Map());
+
   // P2P connection status
   const [p2pPeers, setP2pPeers] = useState<string[]>([]);
 
@@ -150,14 +153,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         try {
           const data = JSON.parse(event.data);
           
-          // Track typing indicators for the cat
+          // Track typing indicators + notify when someone starts typing (throttled)
           if (data.type === 'TypingIndicator') {
+            const fromUser = data.from_username;
+            const targetUser = data.target_username;
             setTypingFriends(prev => {
               if (data.is_typing) {
-                if (prev.includes(data.from_username)) return prev;
-                return [...prev, data.from_username];
+                if (prev.includes(fromUser)) return prev;
+                // Show a toast notification when someone starts typing in your DMs
+                // Only if you're not currently on their DM page
+                if (targetUser === user?.username && fromUser && !pathname.startsWith(`/chat/${fromUser}`)) {
+                  const now = Date.now();
+                  const lastToast = typingNotifThrottleRef.current.get(fromUser) || 0;
+                  if (now - lastToast > 30_000) { // max once per 30s per user
+                    typingNotifThrottleRef.current.set(fromUser, now);
+                    toast.info(`@${fromUser} is typing...`, {
+                      description: `Direct message from ${fromUser}`,
+                      duration: 3000,
+                    });
+                  }
+                }
+                return [...prev, fromUser];
               }
-              return prev.filter(n => n !== data.from_username);
+              return prev.filter(n => n !== fromUser);
             });
             return;
           }

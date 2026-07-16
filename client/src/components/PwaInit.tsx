@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, restoreTokenFromDB } from "@/lib/api";
 
 export default function PwaInit() {
   useEffect(() => {
+    // Restore JWT token from IndexedDB backup (survives mobile PWA localStorage clears)
+    restoreTokenFromDB();
+
     if (!("serviceWorker" in navigator)) return;
 
     // Register service worker

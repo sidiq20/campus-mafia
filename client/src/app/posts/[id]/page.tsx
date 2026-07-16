@@ -112,6 +112,9 @@ export default function PostDetailPage() {
     onSuccess: (data) => {
       toast.success(data.status === 'reposted' ? 'Broadcast retransmitted' : 'Repost removed');
       queryClient.invalidateQueries({ queryKey: ['post', id] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to repost');
     }
   });
 
@@ -368,6 +371,9 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
       refetchComments();
       queryClient.invalidateQueries({ queryKey: ['post', postId] });
       toast.success("Reply sent (+2 INF)");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to reply. Try again.');
     }
   });
 

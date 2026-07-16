@@ -187,6 +187,18 @@ async fn handle_p2p_socket(socket: WebSocket) {
                         }
                     }
                 }
+
+                // Relay local-broadcast and local-reaction to ALL connected P2P clients
+                // This ensures local chat messages work cross-device even when WebRTC
+                // data channels fail (e.g., behind symmetric NAT on mobile hotspot).
+                if msg_type == "local-broadcast-relay" || msg_type == "local-reaction-relay" {
+                    let clients = P2P_CLIENTS.lock().await;
+                    for (username, target_tx) in clients.iter() {
+                        if username != &from {
+                            let _ = target_tx.send(text.clone());
+                        }
+                    }
+                }
             }
         }
     });

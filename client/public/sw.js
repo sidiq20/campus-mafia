@@ -1,5 +1,5 @@
 // Campus Mafia Service Worker — handles push notifications + offline caching
-const CACHE_NAME = 'campus-mafia-v2';
+const CACHE_NAME = 'campus-mafia-v3';
 const API_BASE = self.location.origin;
 
 // Assets to cache immediately on install (app shell)
@@ -15,6 +15,13 @@ const PRECACHE_URLS = [
   '/black-market',
   '/search',
   '/login',
+];
+
+// Auth endpoints that should NEVER be cached (always fetch from network)
+const AUTH_ENDPOINTS = [
+  '/api/auth/me',
+  '/api/auth/login',
+  '/api/auth/logout',
 ];
 
 self.addEventListener('install', (event) => {
@@ -51,12 +58,25 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET and API calls (API calls should go to network, fallback cache for GET)
   if (request.method !== 'GET') return;
 
+  // For auth endpoints — NEVER cache, always go to network
+  if (AUTH_ENDPOINTS.some(endpoint => url.pathname === endpoint)) {
+    event.respondWith(
+      fetch(request).catch(() => {
+        return new Response(JSON.stringify({ offline: true, message: 'You are offline' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      })
+    );
+    return;
+  }
+
   // For API calls — network first, cache fallback
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful API responses
+          // Only cache successful API responses (never cache errors/auth failures)
           if (response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {

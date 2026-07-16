@@ -39,6 +39,30 @@ export default function LocalP2PChatPage() {
   // Filter out self from online users
   const otherOnlineUsers = onlineUsers.filter(u => u !== user?.username);
   const connectedPeers = p2pManager.getConnectedPeers();
+  const [relayAvailable, setRelayAvailable] = useState(false);
+  // Track which users we've already attempted P2P connection with (avoid spamming)
+  const attemptedConnectRef = useRef<Set<string>>(new Set());
+
+  const canSend = !!content.trim() && (peerCount > 0 || (otherOnlineUsers.length > 0 && relayAvailable));
+
+  // Auto-connect to newly appeared online users (only attempt once per user)
+  useEffect(() => {
+    otherOnlineUsers.forEach(username => {
+      if (!connectedPeers.includes(username) && !attemptedConnectRef.current.has(username)) {
+        attemptedConnectRef.current.add(username);
+        p2pManager.connectToPeer(username);
+      }
+    });
+  }, [onlineUsers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll for relay status separately
+  useEffect(() => {
+    const relayInterval = setInterval(() => {
+      setRelayAvailable(p2pManager.isRelayAvailable());
+    }, 2000);
+    setRelayAvailable(p2pManager.isRelayAvailable());
+    return () => clearInterval(relayInterval);
+  }, []);
 
   // Poll for new messages + peer count + start location sharing
   useEffect(() => {
@@ -117,9 +141,16 @@ export default function LocalP2PChatPage() {
               <span className="absolute inset-0 bg-green-500 rounded-full" />
             </span>
             <span className="text-[10px] text-green-400/70">
-              {peerCount} peer{peerCount !== 1 ? 's' : ''} connected
+              {peerCount > 0
+                ? `${peerCount} peer${peerCount !== 1 ? 's' : ''} connected`
+                : otherOnlineUsers.length > 0
+                  ? `${otherOnlineUsers.length} online · server relay`
+                  : 'offline'
+              }
             </span>
-            <span className="text-[9px] text-zinc-600">· P2P encrypted</span>
+            <span className={`text-[9px] ${peerCount > 0 ? 'text-green-500/70' : 'text-yellow-500/70'}`}>
+              {peerCount > 0 ? '· P2P encrypted' : '· server relay'}
+            </span>
           </div>
         </div>
         <button
@@ -311,25 +342,34 @@ export default function LocalP2PChatPage() {
               value={content}
               onChange={e => setContent(e.target.value)}
               className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-4 py-3 text-sm outline-none focus:border-green-500/50 text-zinc-200"
-              placeholder={peerCount > 0 ? "Local broadcast to nearby operatives..." : "No peers connected yet..."}
-              disabled={peerCount === 0}
+              placeholder={canSend ? "Local broadcast to nearby operatives..." : otherOnlineUsers.length > 0 ? "Connecting to online operatives..." : "No operatives online..."}
+              disabled={!canSend}
               onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey && content.trim() && peerCount > 0) handleSend();
+                if (e.key === 'Enter' && !e.shiftKey && canSend) handleSend();
               }}
             />
             <button
               onClick={handleSend}
-              disabled={!content.trim() || peerCount === 0}
+              disabled={!canSend}
               className="px-5 border border-green-500/40 bg-green-500/10 text-green-400 rounded-lg transition-all hover:bg-green-500/20 disabled:opacity-50"
             >
               <Send size={18} />
             </button>
           </div>
-          {peerCount === 0 && (
+          {!canSend && otherOnlineUsers.length > 0 && (
+            <p className="text-[9px] text-yellow-600/70 mt-2 text-center animate-pulse">
+              Connecting via relay... messages will be delivered when connection establishes
+            </p>
+          )}
+          {otherOnlineUsers.length === 0 && (
             <p className="text-[9px] text-zinc-600 mt-2 text-center">
-              {otherOnlineUsers.length > 0
-                ? 'Click an online operative above to establish a P2P connection'
-                : 'No other operatives are currently online'}
+              No other operatives are currently online
+            </p>
+          )
+          }
+          {canSend && peerCount === 0 && otherOnlineUsers.length > 0 && (
+            <p className="text-[9px] text-yellow-600/60 mt-2 text-center">
+              ⚡ Using server relay — messages may have slight delay
             </p>
           )}
         </div>

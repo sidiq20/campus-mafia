@@ -234,13 +234,31 @@ export class P2PManager {
       reply_to_content: replyToContent || null,
       reactions: {},
     };
-    this.dataChannels.forEach((dc, username) => {
+    // 1. Send via P2P data channels (direct WebRTC — fastest when it works)
+    this.dataChannels.forEach((dc) => {
       if (dc.readyState === 'open') {
         try {
           dc.send(JSON.stringify(message));
         } catch {}
       }
     });
+
+    // 2. Send via signaling WebSocket relay as fallback (always works as long as WS is up)
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify({
+          type: 'local-broadcast-relay',
+          from: this.username,
+          id: now,
+          content,
+          created_at: now,
+          reply_to_id: replyToId || null,
+          reply_to_content: replyToContent || null,
+          reactions: {},
+        }));
+      } catch {}
+    }
+
     // Remove type from stored message
     const { type: _, ...stored } = message;
     this.localMessages.push(stored);
@@ -256,20 +274,35 @@ export class P2PManager {
     const msg = this.localMessages.find(m => m.id === messageId);
     const alreadyReacted = msg?.reactions?.[emoji]?.includes(this.username);
 
-    // Broadcast to peers
+    const reactionPayload = {
+      type: 'local-reaction',
+      from: this.username,
+      message_id: messageId,
+      emoji,
+      remove: alreadyReacted,
+    };
+
+    // 1. Broadcast to peers via P2P data channels
     this.dataChannels.forEach((dc) => {
       if (dc.readyState === 'open') {
         try {
-          dc.send(JSON.stringify({
-            type: 'local-reaction',
-            from: this.username,
-            message_id: messageId,
-            emoji,
-            remove: alreadyReacted, // true = toggle off
-          }));
+          dc.send(JSON.stringify(reactionPayload));
         } catch {}
       }
     });
+
+    // 2. Send via signaling WebSocket relay as fallback
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify({
+          type: 'local-reaction-relay',
+          from: this.username,
+          message_id: messageId,
+          emoji,
+          remove: alreadyReacted,
+        }));
+      } catch {}
+    }
 
     // Apply locally immediately
     this.applyReaction(this.username, messageId, emoji, !!alreadyReacted);
@@ -347,6 +380,13 @@ export class P2PManager {
       this.connections.delete(data.from);
       this.dataChannels.delete(data.from);
       this.peerPositions.delete(data.from);
+    } else if (data.type === 'local-broadcast-relay') {
+      // Relayed local broadcast from server — use when P2P data channel fails cross-device
+      this.addRelayedMessage(data);
+    } else if (data.type === 'local-reaction-relay') {
+      // Relayed local reaction from server
+      this.applyReaction(data.from, data.message_id, data.emoji, data.remove || false);
+      this.onLocalMessageCallback?.(this.localMessages.find(m => m.id === data.message_id) || this.localMessages[this.localMessages.length - 1]);
     }
   }
 
@@ -483,6 +523,31 @@ export class P2PManager {
     };
   }
 
+  /**
+   * Add a message received from the server relay (signaling WS).
+   * Used as fallback when P2P data channels fail cross-device.
+   */
+  private addRelayedMessage(data: any) {
+    const newMsg: LocalMessage = {
+      id: data.id || data.created_at,
+      from: data.from,
+      content: data.content,
+      created_at: data.created_at,
+      reply_to_id: data.reply_to_id || null,
+      reply_to_content: data.reply_to_content || null,
+      reactions: data.reactions || {},
+    };
+    // Avoid duplicates (same id already exists from P2P direct delivery or another relay)
+    const exists = this.localMessages.some(m => m.id === newMsg.id);
+    if (!exists) {
+      this.localMessages.push(newMsg);
+      if (this.localMessages.length > 200) {
+        this.localMessages = this.localMessages.slice(-200);
+      }
+    }
+    this.onLocalMessageCallback?.(newMsg);
+  }
+
   // Send a message via P2P if connected, otherwise queue it
   async sendMessage(to: string, content: string, replyToId?: string | null): Promise<boolean> {
     const dc = this.dataChannels.get(to);
@@ -545,6 +610,11 @@ export class P2PManager {
     return Array.from(this.dataChannels.entries())
       .filter(([_, dc]) => dc.readyState === 'open')
       .map(([username]) => username);
+  }
+
+  /** Returns true if the signaling WebSocket is connected (relay is available). */
+  isRelayAvailable(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
   }
 
   // ─── Geolocation ───

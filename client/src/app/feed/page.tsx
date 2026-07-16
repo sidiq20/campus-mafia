@@ -393,6 +393,9 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
     onSuccess: (data) => {
       toast.success(data.status === 'reposted' ? 'Broadcast retransmitted' : 'Repost removed');
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to repost');
     }
   });
 
@@ -436,10 +439,13 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
     onMutate: () => { commentSendingRef.current = true; },
     onSuccess: () => {
       setCommentText('');
-      toast.success("Comment added (+2 INF)");
       queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
+      toast.success("Comment added (+2 INF)");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to send reply. Try again.');
     },
     onSettled: () => { commentSendingRef.current = false; },
   });

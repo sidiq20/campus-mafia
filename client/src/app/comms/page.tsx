@@ -95,17 +95,12 @@ export default function CommsPage() {
       if (context?.previousMessages) {
         queryClient.setQueryData(['chat', activeChannel], context.previousMessages);
       }
-      setContent(context?.messageContent || '');
-      setSendingLock(false);
       toast.error(err instanceof Error ? err.message : 'Transmission failed. Signal lost.');
     },
     onSettled: () => {
-      setSendingLock(false);
-      queryClient.invalidateQueries({ queryKey: ['chat', activeChannel] });
-    },
-    onSuccess: () => {
       setContent('');
       setSendingLock(false);
+      queryClient.invalidateQueries({ queryKey: ['chat', activeChannel] });
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 50);

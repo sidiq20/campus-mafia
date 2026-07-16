@@ -114,7 +114,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     });
 
     // Listen for local broadcast messages and update peer count
-    p2pManager.onLocalMessage((from, content) => {
+    p2pManager.onLocalMessage(() => {
       setP2pPeers(p2pManager.getConnectedPeers());
     });
 

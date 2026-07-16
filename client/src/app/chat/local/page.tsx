@@ -1,22 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { MentionText } from '@/components/MentionText';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
-import { ArrowLeft, Send, Radio, MapIcon, User, Wifi } from 'lucide-react';
-import { p2pManager } from '@/lib/offline';
+import { ArrowLeft, Send, Radio, MapIcon, User, Wifi, Reply, X } from 'lucide-react';
+import { p2pManager, type LocalMessage } from '@/lib/offline';
 import { apiFetch } from '@/lib/api';
 import PeerRadar from '@/components/PeerRadar';
 import { toast } from 'sonner';
 
-type LocalMessage = {
-  from: string;
-  content: string;
-  created_at: string;
-};
+const QUICK_EMOJIS = ['👍', '❤️', '🔥', '💀', '🗿'];
 
 export default function LocalP2PChatPage() {
   const { user } = useUser();
@@ -24,6 +20,8 @@ export default function LocalP2PChatPage() {
   const [content, setContent] = useState('');
   const [peerCount, setPeerCount] = useState(0);
   const [showRadar, setShowRadar] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; content: string } | null>(null);
+  const [hoveredMsg, setHoveredMsg] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -72,18 +70,35 @@ export default function LocalP2PChatPage() {
     }
   }, [messages]);
 
-  const handleSend = () => {
+  // Focus input when replyTo changes
+  useEffect(() => {
+    if (replyTo) {
+      inputRef.current?.focus();
+    }
+  }, [replyTo]);
+
+  const handleSend = useCallback(() => {
     if (!content.trim()) return;
-    const sentCount = p2pManager.broadcastToPeers(content.trim());
+    p2pManager.broadcastToPeers(content.trim(), replyTo?.id || null, replyTo?.content || null);
     setContent('');
+    setReplyTo(null);
     setMessages([...p2pManager.getLocalMessages()]);
     inputRef.current?.focus();
-  };
+  }, [content, replyTo]);
+
+  const handleReact = useCallback((messageId: string, emoji: string) => {
+    p2pManager.sendReaction(messageId, emoji);
+    // Immediately reflect in UI
+    setMessages([...p2pManager.getLocalMessages()]);
+  }, []);
 
   const handleConnectToPeer = (username: string) => {
     p2pManager.connectToPeer(username);
     toast.info(`Connecting to @${username}...`);
   };
+
+  // Build a lookup for reply previews
+  const msgById = useCallback((id: string) => messages.find(m => m.id === id), [messages]);
 
   return (
     <DashboardLayout>
@@ -173,19 +188,42 @@ export default function LocalP2PChatPage() {
           ) : (
             messages.map((msg, i) => {
               const myMsg = msg.from === user?.username;
+              const replyPreview = msg.reply_to_id ? msgById(msg.reply_to_id) : null;
+              const reactionEntries = Object.entries(msg.reactions || {}).filter(([, users]) => users.length > 0);
+
               return (
-                <div key={i} className={`flex ${myMsg ? 'justify-end' : 'justify-start'}`}>
-                  <div className="max-w-[80%]">
+                <div
+                  key={msg.id || i}
+                  className={`flex ${myMsg ? 'justify-end' : 'justify-start'} group`}
+                  onMouseEnter={() => setHoveredMsg(msg.id)}
+                  onMouseLeave={() => setHoveredMsg(null)}
+                >
+                  <div className="max-w-[80%] relative">
+                    {/* Sender name (other users) */}
                     {!myMsg && (
                       <Link href={`/profile/${msg.from}`} className="text-[10px] font-bold text-zinc-500 hover:text-green-400 mb-1 block transition-colors">
                         @{msg.from}
                       </Link>
                     )}
+
+                    {/* Message bubble */}
                     <div className={`px-4 py-2.5 rounded-lg border ${
                       myMsg
                         ? 'bg-green-500/10 border-green-500/30 rounded-tr-sm'
                         : 'bg-zinc-900 border-zinc-800'
                     }`}>
+                      {/* Reply preview */}
+                      {msg.reply_to_content && (
+                        <div className="mb-2 pl-2 border-l-2 border-zinc-600">
+                          <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
+                            Replying to {replyPreview?.from || 'message'}
+                          </span>
+                          <p className="text-[11px] text-zinc-500 italic truncate mt-0.5">
+                            {msg.reply_to_content}
+                          </p>
+                        </div>
+                      )}
+
                       <p className="text-sm text-zinc-100 font-mono"><MentionText text={msg.content} /></p>
                       <div className="flex justify-end mt-1">
                         <span className="text-[9px] text-zinc-500">
@@ -195,6 +233,55 @@ export default function LocalP2PChatPage() {
                         </span>
                       </div>
                     </div>
+
+                    {/* Reactions row */}
+                    {reactionEntries.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {reactionEntries.map(([emoji, users]) => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleReact(msg.id, emoji)}
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs transition-all ${
+                              users.includes(user?.username || '')
+                                ? 'bg-green-500/15 border border-green-500/30'
+                                : 'bg-zinc-800/50 border border-zinc-700/50 hover:bg-zinc-800'
+                            }`}
+                            title={users.join(', ')}
+                          >
+                            <span>{emoji}</span>
+                            <span className="text-[10px] text-zinc-400 font-bold">{users.length}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Action buttons on hover */}
+                    {hoveredMsg === msg.id && (
+                      <div className={`absolute -top-3 ${myMsg ? 'left-0' : 'right-0'} flex items-center gap-0.5 bg-black border border-zinc-800 rounded-lg p-0.5 shadow-xl z-10`}>
+                        {/* Quick reaction picker */}
+                        {QUICK_EMOJIS.map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleReact(msg.id, emoji)}
+                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 text-xs transition-colors"
+                            title={`React with ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        {/* Reply button */}
+                        <button
+                          onClick={() => {
+                            setReplyTo({ id: msg.id, content: msg.content.slice(0, 80) + (msg.content.length > 80 ? '...' : '') });
+                            inputRef.current?.focus();
+                          }}
+                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 text-zinc-400 hover:text-green-400 transition-colors"
+                          title="Reply"
+                        >
+                          <Reply size={12} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -203,6 +290,21 @@ export default function LocalP2PChatPage() {
         </div>
 
         <div className="p-4 sm:p-6 border-t border-zinc-800 bg-black/60 backdrop-blur">
+          {/* Reply indicator bar */}
+          {replyTo && (
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs">
+              <Reply size={12} className="text-green-500 shrink-0" />
+              <span className="text-zinc-500 font-bold uppercase tracking-wider text-[9px]">Replying</span>
+              <span className="text-zinc-400 truncate flex-1">{replyTo.content}</span>
+              <button
+                onClick={() => setReplyTo(null)}
+                className="text-zinc-600 hover:text-red-400 transition-colors shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <input
               ref={inputRef}

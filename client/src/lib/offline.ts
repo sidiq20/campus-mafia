@@ -108,14 +108,25 @@ export type PeerPosition = {
 
 type SignalingCallback = (msg: any) => void;
 
+/** A message in the local P2P area chat. */
+export type LocalMessage = {
+  id: string;
+  from: string;
+  content: string;
+  created_at: string;
+  reply_to_id: string | null;
+  reply_to_content: string | null;
+  reactions: Record<string, string[]>; // emoji -> usernames who reacted
+};
+
 export class P2PManager {
   private connections: Map<string, RTCPeerConnection> = new Map();
   private dataChannels: Map<string, RTCDataChannel> = new Map();
   private ws: WebSocket | null = null;
   private onMessageCallback: ((from: string, content: string) => void) | null = null;
   private onConnectionCallback: ((username: string, connected: boolean) => void) | null = null;
-  private onLocalMessageCallback: ((from: string, content: string) => void) | null = null;
-  private localMessages: { from: string; content: string; created_at: string }[] = [];
+  private onLocalMessageCallback: ((msg: LocalMessage) => void) | null = null;
+  private localMessages: LocalMessage[] = [];
   private username: string = '';
   private online: boolean = false;
   private peerPositions: Map<string, PeerPosition> = new Map();
@@ -189,13 +200,13 @@ export class P2PManager {
     this.onConnectionCallback = cb;
   }
 
-  // Callback for local group broadcast messages
-  onLocalMessage(cb: (from: string, content: string) => void) {
+  // Callback for local group broadcast messages (receives full LocalMessage)
+  onLocalMessage(cb: (msg: LocalMessage) => void) {
     this.onLocalMessageCallback = cb;
   }
 
   // Get local group message history
-  getLocalMessages(): { from: string; content: string; created_at: string }[] {
+  getLocalMessages(): LocalMessage[] {
     return this.localMessages;
   }
 
@@ -205,25 +216,74 @@ export class P2PManager {
   }
 
   // Broadcast a message to ALL connected P2P peers (local group chat)
-  broadcastToPeers(content: string): number {
-    let sentCount = 0;
-    const message = {
+  // Returns the message id (created_at timestamp) for immediate UI updates
+  broadcastToPeers(content: string, replyToId?: string | null, replyToContent?: string | null): string {
+    const now = new Date().toISOString();
+    const message: LocalMessage & { type: string } = {
       type: 'local-broadcast',
+      id: now,
       from: this.username,
       content,
-      created_at: new Date().toISOString(),
+      created_at: now,
+      reply_to_id: replyToId || null,
+      reply_to_content: replyToContent || null,
+      reactions: {},
     };
     this.dataChannels.forEach((dc, username) => {
       if (dc.readyState === 'open') {
         try {
           dc.send(JSON.stringify(message));
-          sentCount++;
         } catch {}
       }
     });
-    // Also record our own message
-    this.localMessages.push(message);
-    return sentCount;
+    // Remove type from stored message
+    const { type: _, ...stored } = message;
+    this.localMessages.push(stored);
+    return now;
+  }
+
+  /**
+   * Send a reaction to a local area chat message.
+   * Toggles: if the current user already reacted with this emoji, remove it.
+   */
+  sendReaction(messageId: string, emoji: string) {
+    // Check if we already reacted with this emoji
+    const msg = this.localMessages.find(m => m.id === messageId);
+    const alreadyReacted = msg?.reactions?.[emoji]?.includes(this.username);
+
+    // Broadcast to peers
+    this.dataChannels.forEach((dc) => {
+      if (dc.readyState === 'open') {
+        try {
+          dc.send(JSON.stringify({
+            type: 'local-reaction',
+            from: this.username,
+            message_id: messageId,
+            emoji,
+            remove: alreadyReacted, // true = toggle off
+          }));
+        } catch {}
+      }
+    });
+
+    // Apply locally immediately
+    this.applyReaction(this.username, messageId, emoji, !!alreadyReacted);
+  }
+
+  private applyReaction(username: string, messageId: string, emoji: string, remove: boolean) {
+    const msg = this.localMessages.find(m => m.id === messageId);
+    if (!msg) return;
+    if (!msg.reactions) msg.reactions = {};
+    if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+
+    if (remove) {
+      msg.reactions[emoji] = msg.reactions[emoji].filter(u => u !== username);
+      if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+    } else {
+      if (!msg.reactions[emoji].includes(username)) {
+        msg.reactions[emoji].push(username);
+      }
+    }
   }
 
   isOnline(): boolean {
@@ -389,11 +449,28 @@ export class P2PManager {
           this.onMessageCallback?.(peerUsername, data.content);
         } else if (data.type === 'local-broadcast') {
           // Store in local group history and notify (cap at 200)
-          this.localMessages.push({ from: data.from, content: data.content, created_at: data.created_at });
-          if (this.localMessages.length > 200) {
-            this.localMessages = this.localMessages.slice(-200);
+          const newMsg: LocalMessage = {
+            id: data.id || data.created_at,
+            from: data.from,
+            content: data.content,
+            created_at: data.created_at,
+            reply_to_id: data.reply_to_id || null,
+            reply_to_content: data.reply_to_content || null,
+            reactions: data.reactions || {},
+          };
+          // Avoid duplicates (same id already exists)
+          const exists = this.localMessages.some(m => m.id === newMsg.id);
+          if (!exists) {
+            this.localMessages.push(newMsg);
+            if (this.localMessages.length > 200) {
+              this.localMessages = this.localMessages.slice(-200);
+            }
           }
-          this.onLocalMessageCallback?.(data.from, data.content);
+          this.onLocalMessageCallback?.(newMsg);
+        } else if (data.type === 'local-reaction') {
+          this.applyReaction(data.from, data.message_id, data.emoji, data.remove || false);
+          // Notify so the UI refreshes
+          this.onLocalMessageCallback?.(this.localMessages.find(m => m.id === data.message_id) || this.localMessages[this.localMessages.length - 1]);
         } else if (data.type === 'location-update') {
           this.handleLocationUpdate(data.from, data.lat, data.lng);
         }

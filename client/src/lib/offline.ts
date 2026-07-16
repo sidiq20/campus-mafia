@@ -236,6 +236,17 @@ export class P2PManager {
     try {
       this.ws = new WebSocket(`${wsUrl}/api/ws/p2p`);
 
+      this.ws.onopen = () => {
+        // Register our presence on the P2P signaling server so we
+        // appear in /api/users/online and other peers see us.
+        if (this.username) {
+          this.ws?.send(JSON.stringify({
+            type: 'p2p-presence',
+            from: this.username,
+          }));
+        }
+      };
+
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);

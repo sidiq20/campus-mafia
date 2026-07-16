@@ -1,5 +1,5 @@
 // Campus Mafia Service Worker — handles push notifications + offline caching
-const CACHE_NAME = 'campus-mafia-v1';
+const CACHE_NAME = 'campus-mafia-v2';
 const API_BASE = self.location.origin;
 
 // Assets to cache immediately on install (app shell)
@@ -157,6 +157,14 @@ self.addEventListener('notificationclick', (event) => {
       }
     })
   );
+});
+
+// ─── Handle messages from client (e.g., SKIP_WAITING on SW update) ───
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // ─── Background Sync for offline messages ───

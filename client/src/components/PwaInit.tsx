@@ -12,6 +12,29 @@ export default function PwaInit() {
       (registration) => {
         console.log("Service Worker registered with scope:", registration.scope);
 
+        // ─── Auto-update: detect new SW and reload ───
+        // This ensures PWA users always get the latest JS (fixes P2P and other bugs
+        // when the service worker serves stale cached bundles).
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (!newWorker) return;
+
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New SW is waiting — activate it; controllerchange will trigger the reload
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+
+        // Listen for controller change (new SW took over)
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+
         // Register background sync for offline messages (if supported)
         if ('sync' in (registration as any)) {
           (registration as any).sync.register('sync-messages').catch(() => {});

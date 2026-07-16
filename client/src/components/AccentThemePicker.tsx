@@ -3,13 +3,12 @@
 import { useEffect, useState } from 'react';
 import { Palette } from 'lucide-react';
 
-type ThemeVars = Record<string, string>;
-
 interface Theme {
   name: string;
   color: string;
   key: string;
-  vars: ThemeVars;
+  // Overrides for Tailwind v4's --color-green-* palette variables
+  vars: Record<string, string>;
 }
 
 const THEMES: Theme[] = [
@@ -18,14 +17,17 @@ const THEMES: Theme[] = [
     color: '#22c55e',
     key: 'green',
     vars: {
-      '--primary': '#22c55e',
-      '--ring': '#22c55e',
-      '--border': 'rgba(34, 197, 94, 0.2)',
-      '--foreground': '#22c55e',
-      '--card-foreground': '#22c55e',
-      '--secondary-foreground': '#22c55e',
-      '--muted-foreground': '#15803d',
-      '--primary-foreground': '#000000',
+      '--color-green-50': '#f0fdf4',
+      '--color-green-100': '#dcfce7',
+      '--color-green-200': '#bbf7d0',
+      '--color-green-300': '#86efac',
+      '--color-green-400': '#4ade80',
+      '--color-green-500': '#22c55e',
+      '--color-green-600': '#16a34a',
+      '--color-green-700': '#15803d',
+      '--color-green-800': '#166534',
+      '--color-green-900': '#14532d',
+      '--color-green-950': '#052e16',
     },
   },
   {
@@ -33,14 +35,17 @@ const THEMES: Theme[] = [
     color: '#ef4444',
     key: 'red',
     vars: {
-      '--primary': '#ef4444',
-      '--ring': '#ef4444',
-      '--border': 'rgba(239, 68, 68, 0.2)',
-      '--foreground': '#ef4444',
-      '--card-foreground': '#ef4444',
-      '--secondary-foreground': '#ef4444',
-      '--muted-foreground': '#991b1b',
-      '--primary-foreground': '#000000',
+      '--color-green-50': '#fef2f2',
+      '--color-green-100': '#fee2e2',
+      '--color-green-200': '#fecaca',
+      '--color-green-300': '#fca5a5',
+      '--color-green-400': '#f87171',
+      '--color-green-500': '#ef4444',
+      '--color-green-600': '#dc2626',
+      '--color-green-700': '#b91c1c',
+      '--color-green-800': '#991b1b',
+      '--color-green-900': '#7f1d1d',
+      '--color-green-950': '#450a0a',
     },
   },
   {
@@ -48,14 +53,17 @@ const THEMES: Theme[] = [
     color: '#a855f7',
     key: 'purple',
     vars: {
-      '--primary': '#a855f7',
-      '--ring': '#a855f7',
-      '--border': 'rgba(168, 85, 247, 0.2)',
-      '--foreground': '#a855f7',
-      '--card-foreground': '#a855f7',
-      '--secondary-foreground': '#a855f7',
-      '--muted-foreground': '#7e22ce',
-      '--primary-foreground': '#000000',
+      '--color-green-50': '#faf5ff',
+      '--color-green-100': '#f3e8ff',
+      '--color-green-200': '#e9d5ff',
+      '--color-green-300': '#d8b4fe',
+      '--color-green-400': '#c084fc',
+      '--color-green-500': '#a855f7',
+      '--color-green-600': '#9333ea',
+      '--color-green-700': '#7e22ce',
+      '--color-green-800': '#6b21a8',
+      '--color-green-900': '#581c87',
+      '--color-green-950': '#3b0764',
     },
   },
   {
@@ -63,14 +71,17 @@ const THEMES: Theme[] = [
     color: '#3b82f6',
     key: 'blue',
     vars: {
-      '--primary': '#3b82f6',
-      '--ring': '#3b82f6',
-      '--border': 'rgba(59, 130, 246, 0.2)',
-      '--foreground': '#3b82f6',
-      '--card-foreground': '#3b82f6',
-      '--secondary-foreground': '#3b82f6',
-      '--muted-foreground': '#1d4ed8',
-      '--primary-foreground': '#000000',
+      '--color-green-50': '#eff6ff',
+      '--color-green-100': '#dbeafe',
+      '--color-green-200': '#bfdbfe',
+      '--color-green-300': '#93c5fd',
+      '--color-green-400': '#60a5fa',
+      '--color-green-500': '#3b82f6',
+      '--color-green-600': '#2563eb',
+      '--color-green-700': '#1d4ed8',
+      '--color-green-800': '#1e40af',
+      '--color-green-900': '#1e3a8a',
+      '--color-green-950': '#172554',
     },
   },
   {
@@ -78,14 +89,17 @@ const THEMES: Theme[] = [
     color: '#06b6d4',
     key: 'cyan',
     vars: {
-      '--primary': '#06b6d4',
-      '--ring': '#06b6d4',
-      '--border': 'rgba(6, 182, 212, 0.2)',
-      '--foreground': '#06b6d4',
-      '--card-foreground': '#06b6d4',
-      '--secondary-foreground': '#06b6d4',
-      '--muted-foreground': '#0e7490',
-      '--primary-foreground': '#000000',
+      '--color-green-50': '#ecfeff',
+      '--color-green-100': '#cffafe',
+      '--color-green-200': '#a5f3fc',
+      '--color-green-300': '#67e8f9',
+      '--color-green-400': '#22d3ee',
+      '--color-green-500': '#06b6d4',
+      '--color-green-600': '#0891b2',
+      '--color-green-700': '#0e7490',
+      '--color-green-800': '#155e75',
+      '--color-green-900': '#164e63',
+      '--color-green-950': '#083344',
     },
   },
   {
@@ -93,14 +107,17 @@ const THEMES: Theme[] = [
     color: '#f59e0b',
     key: 'amber',
     vars: {
-      '--primary': '#f59e0b',
-      '--ring': '#f59e0b',
-      '--border': 'rgba(245, 158, 11, 0.2)',
-      '--foreground': '#f59e0b',
-      '--card-foreground': '#f59e0b',
-      '--secondary-foreground': '#f59e0b',
-      '--muted-foreground': '#b45309',
-      '--primary-foreground': '#000000',
+      '--color-green-50': '#fffbeb',
+      '--color-green-100': '#fef3c7',
+      '--color-green-200': '#fde68a',
+      '--color-green-300': '#fcd34d',
+      '--color-green-400': '#fbbf24',
+      '--color-green-500': '#f59e0b',
+      '--color-green-600': '#d97706',
+      '--color-green-700': '#b45309',
+      '--color-green-800': '#92400e',
+      '--color-green-900': '#78350f',
+      '--color-green-950': '#451a03',
     },
   },
 ];

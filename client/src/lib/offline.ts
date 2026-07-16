@@ -171,8 +171,6 @@ export class P2PManager {
   }
 
   init(username: string, wsUrl: string) {
-    // Fetch ICE server config from server (async — best effort)
-    this.fetchIceServers(wsUrl);
     this.username = username;
     this.online = navigator.onLine;
 
@@ -187,9 +185,16 @@ export class P2PManager {
       this.disconnectAll();
     });
 
-    if (this.online) {
-      this.connectSignaling(wsUrl);
-    }
+    // Fetch TURN/STUN ICE servers first, THEN connect signaling.
+    // This avoids a race where RTCPeerConnection is created with only
+    // default STUN servers (no TURN), breaking cross-NAT connections.
+    const doConnect = () => {
+      if (this.online) {
+        this.connectSignaling(wsUrl);
+      }
+    };
+
+    this.fetchIceServers(wsUrl).then(doConnect).catch(doConnect);
   }
 
   onMessage(cb: (from: string, content: string) => void) {

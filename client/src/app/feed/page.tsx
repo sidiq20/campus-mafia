@@ -186,6 +186,15 @@ export default function Dashboard() {
             </span>
           </>
         )}
+        {/* Mobile: compact search icon → opens search page */}
+        <Link
+          href="/search"
+          className="sm:hidden ml-auto flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-500 hover:text-green-400 hover:border-green-500/30 hover:bg-green-500/5 transition-all"
+        >
+          <Search size={16} />
+        </Link>
+
+        {/* Desktop: full search bar */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -193,7 +202,7 @@ export default function Dashboard() {
               router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
             }
           }}
-          className="relative ml-auto"
+          className="hidden sm:block relative ml-auto"
         >
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
           <input

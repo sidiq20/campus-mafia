@@ -1,5 +1,10 @@
 import Link from 'next/link';
 import { Skull, ChevronRight, Globe, MessageSquare, Users, Swords, TrendingUp, Award, Smartphone, Radio, Search, User, Bomb, Lock } from 'lucide-react';
+import TerminalBoot from '@/components/TerminalBoot';
+import LiveStats from '@/components/LiveStats';
+import AppShowcase from '@/components/AppShowcase';
+import HowItWorks from '@/components/HowItWorks';
+import FAQSection from '@/components/FAQSection';
 
 const features = [
   {
@@ -93,11 +98,10 @@ export default function LandingPage() {
     <div className="min-h-screen w-full bg-[#050505] text-zinc-100 font-mono relative">
       {/* Cyberpunk background elements */}
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-      
+
       {/* Top Bar — always visible, contains CTAs on mobile */}
       <div className="relative z-[60] border-b border-green-500/10 bg-black/80 backdrop-blur-md sticky top-0">
         <div className="container mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-2">
-          {/* Left: Built by sidiq */}
           <p className="text-[9px] sm:text-[10px] text-zinc-600 uppercase tracking-widest shrink-0">
             Built by{' '}
             <a
@@ -111,9 +115,7 @@ export default function LandingPage() {
             </a>
           </p>
 
-          {/* Right: Login/Signup + GitHub */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Sign Up */}
             <Link
               href="/signup"
               className="px-3 sm:px-5 py-1.5 sm:py-2 bg-green-500/10 text-green-400 border border-green-500/40 rounded-lg hover:bg-green-500/20 hover:shadow-[0_0_12px_rgba(34,197,94,0.2)] transition-all text-[9px] sm:text-xs font-bold uppercase tracking-widest whitespace-nowrap"
@@ -122,7 +124,6 @@ export default function LandingPage() {
               <span className="sm:hidden">Sign Up</span>
             </Link>
 
-            {/* Login */}
             <Link
               href="/login"
               className="px-3 sm:px-5 py-1.5 sm:py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-400 hover:text-green-400 hover:border-green-500/30 hover:bg-zinc-800 transition-all text-[9px] sm:text-xs font-bold uppercase tracking-widest whitespace-nowrap"
@@ -131,7 +132,6 @@ export default function LandingPage() {
               <span className="sm:hidden">Log In</span>
             </Link>
 
-            {/* GitHub */}
             <a
               href="https://github.com/sidiq20/campus-mafia"
               target="_blank"
@@ -148,44 +148,38 @@ export default function LandingPage() {
       </div>
 
       <main className="relative z-10 container mx-auto px-6 py-16">
-        {/* Header */}
-        <header className="text-center mb-12 animate-slide-in">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-green-500/10 border-2 border-green-500/50 mb-8 shadow-[0_0_50px_rgba(34,197,94,0.3)]">
-            <Skull className="text-green-400 drop-shadow-[0_0_15px_rgba(34,197,94,0.8)] w-12 h-12" />
-          </div>
-          <h1 
-            className="text-6xl md:text-8xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-green-300 via-green-500 to-emerald-700 uppercase drop-shadow-[0_0_30px_rgba(34,197,94,0.4)] mb-8"
-          >
-            Dept.OS
-          </h1>
-          <p className="text-xl text-zinc-400 leading-relaxed max-w-2xl mx-auto font-medium mb-4">
-            Dominate the university underground. Factions, territory, influence.
-          </p>
-          <p className="text-sm text-zinc-600 max-w-xl mx-auto">
-            A cyberpunk campus warfare game. Build your reputation, control territory, and rise through the ranks.
-          </p>
+        {/* ─── ANIMATED TERMINAL BOOT + HERO ─── */}
+        <header className="mb-16 min-h-[60vh] flex flex-col justify-center">
+          <TerminalBoot />
         </header>
 
-        {/* Login / Signup Buttons - Below Hero (desktop only) */}
-        <div className="hidden md:flex items-center justify-center gap-4 mb-16 animate-slide-in">
-          <Link 
-            href="/signup" 
-            className="group flex items-center justify-center gap-2 px-8 py-3 bg-green-500/10 text-green-400 border border-green-500/50 rounded-lg hover:bg-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.15)] hover:-translate-y-0.5 transition-all duration-300 font-bold text-sm uppercase tracking-widest"
-          >
-            Request Clearance
-            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-          </Link>
-          
-          <Link 
-            href="/login" 
-            className="px-8 py-3 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 hover:text-green-400 hover:border-green-500/30 hover:bg-zinc-800 transition-all duration-300 font-bold text-sm uppercase tracking-widest"
-          >
-            Terminal Access
-          </Link>
-        </div>
+        {/* ─── LIVE STATS ─── */}
+        <section className="mb-24 animate-slide-in">
+          <div className="text-center mb-8">
+            <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest mb-2">// Active Network Status</h2>
+            <p className="text-xs text-zinc-600">Real-time platform statistics</p>
+          </div>
+          <LiveStats />
+        </section>
 
-        {/* Feature Grid */}
-        <div className="max-w-6xl mx-auto mb-24">
+        {/* ─── HOW IT WORKS ─── */}
+        <section className="mb-24">
+          <HowItWorks />
+        </section>
+
+        {/* ─── APP SHOWCASE ─── */}
+        <section className="mb-24">
+          <div className="text-center mb-12">
+            <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest mb-2">// Live Interface Preview</h2>
+            <p className="text-xs text-zinc-600">What the Dept.OS terminal looks like in the field</p>
+          </div>
+          <div className="flex justify-center">
+            <AppShowcase />
+          </div>
+        </section>
+
+        {/* ─── FEATURE GRID ─── */}
+        <section className="max-w-6xl mx-auto mb-24">
           <div className="text-center mb-12">
             <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest mb-2">// Network Capabilities</h2>
             <p className="text-xs text-zinc-600">Everything available in the current protocol</p>
@@ -197,7 +191,7 @@ export default function LandingPage() {
                 className={`group p-6 border border-zinc-800 bg-black/40 rounded-lg ${f.border} transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(0,0,0,0.5)] animate-slide-in`}
                 style={{ animationDelay: `${i * 80}ms` }}
               >
-                <div className={`w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 group-hover:${f.color} transition-colors`}>
+                <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 group-hover:drop-shadow-[0_0_8px_rgba(34,197,94,0.2)] transition-all">
                   <f.icon size={18} className={f.color} />
                 </div>
                 <h3 className="text-sm font-bold text-zinc-200 mb-2">{f.title}</h3>
@@ -205,38 +199,119 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* CTA Section */}
-        <div className="max-w-md mx-auto text-center animate-slide-in">
+        {/* ─── FAQ ─── */}
+        <section className="mb-24">
+          <FAQSection />
+        </section>
+
+        {/* ─── FINAL CTA ─── */}
+        <section className="max-w-md mx-auto text-center animate-slide-in mb-16">
           <div className="p-10 border border-green-500/20 bg-green-500/5 rounded-2xl shadow-[0_0_50px_rgba(34,197,94,0.1)]">
             <h3 className="text-2xl font-extrabold text-green-400 mb-4">Initialize Uplink</h3>
             <p className="text-zinc-400 text-sm mb-8">Access the campus network and start your rise to power.</p>
-            
+
             <div className="flex flex-col gap-4">
-              <Link 
-                href="/signup" 
+              <Link
+                href="/signup"
                 className="group flex items-center justify-center gap-3 w-full px-10 py-4 bg-green-500/10 text-green-400 border border-green-500/50 rounded hover:bg-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.2)] hover:-translate-y-1 transition-all duration-300 font-bold uppercase tracking-widest"
               >
                 Request Clearance
                 <ChevronRight size={18} />
               </Link>
-              
-              <Link 
-                href="/login" 
+
+              <Link
+                href="/login"
                 className="w-full px-10 py-4 bg-zinc-900 border border-zinc-800 rounded text-zinc-400 hover:text-green-400 hover:border-green-500/30 hover:bg-zinc-800 transition-all duration-300 font-bold uppercase tracking-widest"
               >
                 Terminal Access
               </Link>
             </div>
           </div>
-        </div>
+        </section>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-zinc-800/50 mt-24 py-8 text-center">
-        <p className="text-[10px] text-zinc-700 uppercase tracking-widest">Dept.OS // Campus Underground Network</p>
-        <p className="text-[9px] text-zinc-800 mt-1">Powered by Rust + Next.js</p>
+      {/* ─── FOOTER ─── */}
+      <footer className="relative z-10 border-t border-zinc-800/50 mt-12">
+        <div className="container mx-auto px-6 py-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+            {/* Brand */}
+            <div className="md:col-span-1">
+              <div className="flex items-center gap-2 mb-3">
+                <Skull className="text-green-500 h-5 w-5" />
+                <span className="text-sm font-bold text-green-500 uppercase tracking-widest">Dept.OS</span>
+              </div>
+              <p className="text-[10px] text-zinc-600 leading-relaxed">
+                Cyberpunk campus warfare. Dominate the university underground.
+              </p>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h4 className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Platform</h4>
+              <ul className="space-y-2">
+                {['/signup', '/login', '/feed', '/leaderboard'].map((href) => (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      className="text-[10px] text-zinc-600 hover:text-green-400 transition-colors capitalize"
+                    >
+                      {href === '/signup' ? 'Request Clearance' :
+                       href === '/login' ? 'Terminal Access' :
+                       href === '/feed' ? 'Live Feed' : 'Leaderboard'}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Features */}
+            <div>
+              <h4 className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Game</h4>
+              <ul className="space-y-2">
+                {['Factions', 'Territories', 'Raids', 'Black Market'].map((item) => (
+                  <li key={item}>
+                    <span className="text-[10px] text-zinc-600">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Tech */}
+            <div>
+              <h4 className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Stack</h4>
+              <ul className="space-y-2">
+                {['Rust + Axum', 'Next.js + React', 'PostgreSQL', 'WebRTC P2P'].map((item) => (
+                  <li key={item}>
+                    <span className="text-[10px] text-zinc-600">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom bar */}
+          <div className="border-t border-zinc-800/50 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-[9px] text-zinc-700 uppercase tracking-widest text-center sm:text-left">
+              Dept.OS // Campus Underground Network
+            </p>
+            <div className="flex items-center gap-4">
+              <a
+                href="https://github.com/sidiq20/campus-mafia"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[9px] text-zinc-700 hover:text-green-400 transition-colors uppercase tracking-widest"
+              >
+                GitHub
+              </a>
+              <span className="text-[9px] text-zinc-800">·</span>
+              <span className="text-[9px] text-zinc-800">
+                Powered by Rust + Next.js
+              </span>
+            </div>
+          </div>
+        </div>
       </footer>
 
       {/* Scanline Overlay */}

@@ -110,6 +110,12 @@ pub async fn get_online_users() -> Json<Vec<String>> {
     Json(clients.keys().cloned().collect())
 }
 
+/// Returns the count of currently online (P2P-connected) users
+pub async fn get_online_count() -> usize {
+    let clients = P2P_CLIENTS.lock().await;
+    clients.len()
+}
+
 pub async fn p2p_ws_handler(
     ws: WebSocketUpgrade,
     _state: State<crate::ServerState>,

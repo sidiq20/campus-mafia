@@ -31,6 +31,7 @@ mod ice_servers;
 mod polls;
 mod bounties;
 mod sync;
+mod stats;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -629,6 +630,9 @@ async fn main() {
 
         // Multi-device Sync
         .route("/api/sync", get(sync::sync_data))
+
+        // Live Stats
+        .route("/api/stats", get(stats::get_live_stats))
 
         // Activity
         .route("/api/activity/recent", get(crate::game::get_recent_activity))

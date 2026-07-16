@@ -6,15 +6,15 @@ import { Skull } from 'lucide-react';
 type Line = { text: string; done: boolean; color?: string; delay?: number };
 
 const BOOT_LINES: Omit<Line, 'done'>[] = [
-  { text: '[BOOT] Dept.OS v2.4.1 // Campus Mafia Protocol', color: 'text-green-400', delay: 200 },
-  { text: '[AUTH] Establishing secure uplink...', color: 'text-green-300', delay: 150 },
-  { text: '[NET] Scanning nearby operatives...', color: 'text-cyan-400', delay: 120 },
-  { text: '[INF] Loading faction intelligence grid...', color: 'text-yellow-400', delay: 130 },
-  { text: '[CRYPTO] Initializing encrypted comms channels...', color: 'text-purple-400', delay: 140 },
-  { text: '[TERRITORY] Syncing tactical zone data...', color: 'text-orange-400', delay: 110 },
-  { text: '', color: 'text-transparent', delay: 80 },
-  { text: '> System ready. All protocols nominal.', color: 'text-green-400', delay: 200 },
-  { text: '> Welcome, operative. You are cleared for access.', color: 'text-green-300', delay: 180 },
+  { text: '[BOOT] Dept.OS v2 // Campus Mafia Protocol', color: 'text-green-400', delay: 350 },
+  { text: '[AUTH] Establishing secure uplink...', color: 'text-green-300', delay: 280 },
+  { text: '[NET] Scanning nearby operatives...', color: 'text-cyan-400', delay: 240 },
+  { text: '[INF] Loading faction intelligence grid...', color: 'text-yellow-400', delay: 260 },
+  { text: '[CRYPTO] Initializing encrypted comms channels...', color: 'text-purple-400', delay: 300 },
+  { text: '[TERRITORY] Syncing tactical zone data...', color: 'text-orange-400', delay: 220 },
+  { text: '', color: 'text-transparent', delay: 200 },
+  { text: '> System ready. All protocols nominal.', color: 'text-green-400', delay: 400 },
+  { text: '> Welcome, operative. You are cleared for access.', color: 'text-green-300', delay: 350 },
 ];
 
 export default function TerminalBoot({ onComplete }: { onComplete?: () => void }) {
@@ -46,7 +46,7 @@ export default function TerminalBoot({ onComplete }: { onComplete?: () => void }
     if (currentChar < line.text.length) {
       const timeout = setTimeout(() => {
         setCurrentChar(c => c + 1);
-      }, 15 + Math.random() * 30); // Typewriter jitter
+      }, 35 + Math.random() * 55); // Typewriter jitter (slowed down)
       return () => clearTimeout(timeout);
     }
 
@@ -87,7 +87,7 @@ export default function TerminalBoot({ onComplete }: { onComplete?: () => void }
           <div className="w-3 h-3 rounded-full bg-red-500/60" />
           <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
           <div className="w-3 h-3 rounded-full bg-green-500/60" />
-          <span className="text-[9px] text-zinc-600 uppercase tracking-widest ml-2">deptos-terminal v2.4.1</span>
+          <span className="text-[9px] text-zinc-600 uppercase tracking-widest ml-2">deptos-terminal v2</span>
         </div>
 
         {/* Boot lines */}
@@ -124,10 +124,11 @@ export default function TerminalBoot({ onComplete }: { onComplete?: () => void }
         <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-500/10 border-2 border-green-500/50 mb-6 shadow-[0_0_60px_rgba(34,197,94,0.3)]">
           <Skull className="text-green-400 drop-shadow-[0_0_15px_rgba(34,197,94,0.8)] w-10 h-10" />
         </div>
-        <h1
-          className="text-5xl sm:text-7xl md:text-8xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-green-300 via-green-500 to-emerald-700 uppercase drop-shadow-[0_0_40px_rgba(34,197,94,0.4)] mb-6"
-        >
+        <h1 className="text-5xl sm:text-7xl md:text-8xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-green-300 via-green-500 to-emerald-700 uppercase drop-shadow-[0_0_40px_rgba(34,197,94,0.4)] mb-6 inline-flex items-center gap-3 sm:gap-4">
           Dept.OS
+          <span className="text-sm sm:text-base md:text-lg font-bold text-green-400/80 bg-green-500/10 border border-green-500/30 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md tracking-normal drop-shadow-none">
+            v2
+          </span>
         </h1>
         <p className="text-lg sm:text-xl text-zinc-400 leading-relaxed max-w-2xl mx-auto font-medium mb-3">
           Dominate the university underground. Factions, territory, influence.

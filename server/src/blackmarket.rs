@@ -42,13 +42,16 @@ pub async fn purchase_item(
     let user_id = auth_user.user_id;
 
     let cost = match payload.item_id.as_str() {
-        "cyber_nuke" => 500,
-        "ddos_attack" => 1000,
-        "firewall_upgrade" => 400,
-        "propaganda_boost" => 250,
+        "cyber_nuke" => 75,
+        "ddos_attack" => 350,
+        "firewall_upgrade" => 75,
+        "propaganda_boost" => 200,
         "identity_scrambler" => 100,
-        "inf_cap_bypass" => 5000,
-        "bounty_kill" => 200,
+        "inf_cap_bypass" => 2000,
+        "bounty_kill" => 150,
+        "spy_drone" => 200,
+        "emp_mine" => 300,
+        "smoke_screen" => 250,
         _ => return Err((StatusCode::BAD_REQUEST, "Invalid item".to_string())),
     };
 
@@ -222,6 +225,113 @@ pub async fn use_item(
                     "INSERT INTO active_effects (target_type, target_id, effect_id, expires_at) VALUES ('user', $1, 'bounty_hunter', NOW() + INTERVAL '24 hours')"
                 )
                 .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            }
+        },
+        "spy_drone" => {
+            // Reveals enemy territory stats for 30 min — grants a buff that reveals hidden info
+            let has_active: Option<bool> = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'spy_drone' AND expires_at > NOW())"
+            )
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .flatten();
+
+            if has_active.unwrap_or(false) {
+                sqlx::query(
+                    "UPDATE active_effects SET expires_at = expires_at + INTERVAL '30 minutes' WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'spy_drone'"
+                )
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            } else {
+                sqlx::query(
+                    "INSERT INTO active_effects (target_type, target_id, effect_id, expires_at) VALUES ('user', $1, 'spy_drone', NOW() + INTERVAL '30 minutes')"
+                )
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            }
+        },
+        "emp_mine" => {
+            // Plant an EMP mine on your territory: next attacker loses 50% of INF spent
+            let target_id = payload.target_id.ok_or((StatusCode::BAD_REQUEST, "Target territory required".to_string()))?;
+
+            // Verify territory is owned by user's faction
+            let owner: Option<uuid::Uuid> = sqlx::query_scalar(
+                "SELECT controlling_faction_id FROM territories WHERE id = $1"
+            )
+            .bind(target_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .flatten();
+
+            let user_faction: Option<uuid::Uuid> = sqlx::query_scalar(
+                "SELECT faction_id FROM users WHERE id = $1"
+            )
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .flatten();
+
+            if owner != user_faction {
+                return Err((StatusCode::BAD_REQUEST, "You can only plant EMP mines on your own faction's territories".to_string()));
+            }
+
+            sqlx::query(
+                "INSERT INTO active_effects (target_type, target_id, effect_id, expires_at) VALUES ('territory', $1, 'emp_mine', NOW() + INTERVAL '24 hours')"
+            )
+            .bind(target_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        },
+        "smoke_screen" => {
+            // Hides faction activity for 2 hours — no WS events broadcast for this faction
+            let user_faction: Option<uuid::Uuid> = sqlx::query_scalar(
+                "SELECT faction_id FROM users WHERE id = $1"
+            )
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .flatten();
+
+            if user_faction.is_none() {
+                return Err((StatusCode::BAD_REQUEST, "You must be in a faction to use smoke screen".to_string()));
+            }
+
+            let faction_id = user_faction.unwrap();
+            let has_active: Option<bool> = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'faction' AND target_id = $1 AND effect_id = 'smoke_screen' AND expires_at > NOW())"
+            )
+            .bind(faction_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .flatten();
+
+            if has_active.unwrap_or(false) {
+                sqlx::query(
+                    "UPDATE active_effects SET expires_at = expires_at + INTERVAL '2 hours' WHERE target_type = 'faction' AND target_id = $1 AND effect_id = 'smoke_screen'"
+                )
+                .bind(faction_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            } else {
+                sqlx::query(
+                    "INSERT INTO active_effects (target_type, target_id, effect_id, expires_at) VALUES ('faction', $1, 'smoke_screen', NOW() + INTERVAL '2 hours')"
+                )
+                .bind(faction_id)
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

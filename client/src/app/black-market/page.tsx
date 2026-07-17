@@ -1,7 +1,7 @@
 "use client";
 
 import DashboardLayout from '@/components/DashboardLayout';
-import { Zap, Tag, Skull, Fingerprint, Shield, Bomb, Package, Loader2, Crown, Infinity } from 'lucide-react';
+import { Zap, Tag, Skull, Fingerprint, Shield, Bomb, Package, Loader2, Crown, Infinity, Radio, EyeOff, Target } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { apiFetch } from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -16,8 +16,8 @@ const ITEMS = [
   {
     id: 'cyber_nuke',
     title: 'Cyber Nuke',
-    desc: 'Instantly deals 50 damage to an enemy territory\'s defense score. Bypasses normal attack RNG.',
-    cost: 500,
+    desc: 'Instantly deals 50 damage to an enemy territory\'s defense score. Bypasses normal attack RNG and DDoS locks.',
+    cost: 75,
     icon: <Bomb />,
     category: 'attack',
   },
@@ -25,7 +25,7 @@ const ITEMS = [
     id: 'ddos_attack',
     title: 'DDoS Attack',
     desc: 'Sabotages an enemy faction for 1 hour — they cannot launch territory attacks while under DDoS.',
-    cost: 1000,
+    cost: 350,
     icon: <Skull />,
     category: 'attack',
   },
@@ -33,15 +33,23 @@ const ITEMS = [
     id: 'firewall_upgrade',
     title: 'Firewall Upgrade',
     desc: 'Adds +50 Defense Score to a territory your faction controls. Deploy from the Territory Map.',
-    cost: 400,
+    cost: 75,
     icon: <Shield />,
+    category: 'defense',
+  },
+  {
+    id: 'emp_mine',
+    title: 'EMP Mine',
+    desc: 'Plant on your own territory. The next attacker loses 50% of the INF they spend. Lasts 24 hours.',
+    cost: 300,
+    icon: <Zap />,
     category: 'defense',
   },
   {
     id: 'propaganda_boost',
     title: 'Propaganda Boost',
     desc: 'Doubles the INF earned from all your broadcasts for 30 minutes. Auto-activates on purchase.',
-    cost: 250,
+    cost: 200,
     icon: <Tag />,
     category: 'economy',
   },
@@ -54,10 +62,34 @@ const ITEMS = [
     category: 'stealth',
   },
   {
+    id: 'spy_drone',
+    title: 'Spy Drone',
+    desc: 'Deploy a recon drone for 30 minutes. Reveals hidden intel on enemy territories and factions.',
+    cost: 200,
+    icon: <Radio />,
+    category: 'stealth',
+  },
+  {
+    id: 'bounty_kill',
+    title: 'Bounty Hunter License',
+    desc: 'Grants bounty hunter status for 24 hours. Allows you to collect bounties on wanted targets. Stack to extend.',
+    cost: 150,
+    icon: <Target />,
+    category: 'economy',
+  },
+  {
+    id: 'smoke_screen',
+    title: 'Smoke Screen',
+    desc: 'Shrouds your faction\'s activity for 2 hours. Your territorial actions won\'t broadcast alerts to other factions.',
+    cost: 250,
+    icon: <EyeOff />,
+    category: 'stealth',
+  },
+  {
     id: 'inf_cap_bypass',
     title: 'Syndicate Pass',
     desc: 'Lifts your daily INF earning limit for 24 hours. Stack multiple to extend duration. The ultimate grind accelerator.',
-    cost: 5000,
+    cost: 2000,
     icon: <Zap />,
     category: 'economy',
   },

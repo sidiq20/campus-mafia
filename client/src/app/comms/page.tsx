@@ -19,6 +19,7 @@ type ChatMessage = {
   author_name: string;
   author_display_name: string | null;
   faction_name: string | null;
+  is_edited: boolean;
   created_at: string;
 };
 
@@ -84,6 +85,7 @@ export default function CommsPage() {
           author_name: user?.username || 'phantom',
           author_display_name: user?.display_name || user?.username || 'phantom',
           faction_name: user?.faction_name || 'Unaffiliated',
+          is_edited: false,
           created_at: new Date().toISOString(),
         };
         return old ? [...old, optimisticMsg] : [optimisticMsg];
@@ -292,6 +294,7 @@ export default function CommsPage() {
                           )}
                           <span className="ml-auto text-[10px] text-zinc-600 flex items-center gap-2">
                             {msg.created_at ? new Date(msg.created_at).toLocaleString() : ''}
+                            {msg.is_edited && <span className="italic">(edited)</span>}
                             {isMine && !isEditing && (
                               <>
                                 <button

@@ -57,6 +57,7 @@ struct PostResponse {
     repost_count: Option<i64>,
     has_boosted: Option<bool>,
     has_reposted: Option<bool>,
+    is_edited: Option<bool>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -123,6 +124,7 @@ async fn create_post(
             0::bigint as repost_count,
             false as has_boosted,
             false as has_reposted,
+            false as is_edited,
             i.created_at
         FROM inserted i
         LEFT JOIN users u ON i.user_id = u.id
@@ -253,6 +255,7 @@ async fn get_post_by_id(
             COALESCE(rp.cnt, 0) as repost_count,
             COALESCE(hb.has, false) as has_boosted,
             COALESCE(hr.has, false) as has_reposted,
+            COALESCE(p.is_edited, false) as is_edited,
             p.created_at
         FROM posts p
         LEFT JOIN users u ON p.user_id = u.id
@@ -321,6 +324,7 @@ async fn get_posts(
                     COALESCE(rp.cnt, 0) as repost_count,
                     COALESCE(hb.has, false) as has_boosted,
                     COALESCE(hr.has, false) as has_reposted,
+                    COALESCE(p.is_edited, false) as is_edited,
                     p.created_at
                 FROM posts p
                 LEFT JOIN users u ON p.user_id = u.id
@@ -358,19 +362,19 @@ async fn get_posts(
                 COALESCE(c.cnt, 0) as reply_count,
                 COALESCE(b.cnt, 0) as boost_count,
                 COALESCE(rp.cnt, 0) as repost_count,
-                COALESCE(hb.has, false) as has_boosted,
-                COALESCE(hr.has, false) as has_reposted,
-                p.created_at
-            FROM posts p
-            LEFT JOIN users u ON p.user_id = u.id
-            LEFT JOIN factions f ON u.faction_id = f.id
-            LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM comments c WHERE c.post_id = p.id) c ON true
-            LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') b ON true
-            LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reposts rp WHERE rp.post_id = p.id) rp ON true
-            LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has) hb ON true
-            LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has) hr ON true
-            WHERE ($2::uuid IS NULL OR p.user_id = $2)
-            ORDER BY p.created_at DESC
+                COALESCE(hb.has, false) as has_boosted,                    COALESCE(hr.has, false) as has_reposted,
+                    COALESCE(p.is_edited, false) as is_edited,
+                    p.created_at
+                FROM posts p
+                LEFT JOIN users u ON p.user_id = u.id
+                LEFT JOIN factions f ON u.faction_id = f.id
+                LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM comments c WHERE c.post_id = p.id) c ON true
+                LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reactions r WHERE r.post_id = p.id AND r.reaction_type = 'boost') b ON true
+                LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM reposts rp WHERE rp.post_id = p.id) rp ON true
+                LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1 AND r.reaction_type = 'boost') as has) hb ON true
+                LEFT JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) as has) hr ON true
+                WHERE ($2::uuid IS NULL OR p.user_id = $2)
+                ORDER BY p.created_at DESC
             LIMIT 50
             "#
         )

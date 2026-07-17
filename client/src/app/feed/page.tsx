@@ -31,6 +31,7 @@ type Post = {
   repost_count: number;
   has_boosted: boolean;
   has_reposted: boolean;
+  is_edited: boolean;
   created_at: string;
 };
 
@@ -40,6 +41,7 @@ type Comment = {
   content: string;
   author_username: string | null;
   author_name: string;
+  is_edited: boolean;
   created_at: string;
 };
 
@@ -123,6 +125,7 @@ export default function Dashboard() {
           repost_count: 0,
           has_boosted: false,
           has_reposted: false,
+          is_edited: false,
           created_at: new Date().toISOString(),
         };
         return old ? [optimisticPost, ...old] : [optimisticPost];
@@ -516,6 +519,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
         content: commentText.trim(),
         author_username: user?.username || null,
         author_name: user?.display_name || user?.username || 'You',
+        is_edited: false,
         created_at: new Date().toISOString(),
       };
 
@@ -577,6 +581,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
         <div className="flex items-center gap-4">
           <span className="text-[10px] font-mono text-zinc-600">
             {post.created_at ? new Date(post.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+{post.is_edited && <span className="text-[10px] text-zinc-600 italic ml-1">(edited)</span>}
           </span>
           {isMine && !isEditing && (
             <div className="flex items-center gap-1">
@@ -685,7 +690,7 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
                 <Link href={`/profile/${c.author_username || c.author_name}`} onClick={(e) => e.stopPropagation()} className="font-bold text-zinc-400 hover:text-green-400 mr-2 sm:mr-3 transition-colors whitespace-nowrap">@{c.author_name}</Link>
                 <span className="text-zinc-300 break-words"><MentionText text={c.content} /></span>
               </div>
-              <span className="text-[9px] font-mono text-zinc-600 shrink-0">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+              <span className="text-[9px] font-mono text-zinc-600 shrink-0">{c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}{c.is_edited && <span className="ml-1 italic">(edited)</span>}</span>
             </div>
           ))}
           <div className="flex gap-2 sm:gap-3 mt-4">              <MentionAutocomplete

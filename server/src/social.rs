@@ -116,6 +116,7 @@ pub struct CommentResponse {
     pub author_display_name: String,
     pub author_username: Option<String>,
     pub parent_id: Option<uuid::Uuid>,
+    pub is_edited: Option<bool>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -184,6 +185,7 @@ pub async fn create_comment(
             i.content,
             u.display_name as author_display_name,
             u.username as author_username,
+            false as is_edited,
             i.created_at
         FROM inserted i
         JOIN users u ON i.user_id = u.id
@@ -317,6 +319,7 @@ pub async fn edit_comment(
             u.display_name as author_display_name,
             u.username as author_username,
             c.parent_id,
+            COALESCE(c.is_edited, false) as is_edited,
             c.created_at
         FROM comments c
         JOIN users u ON c.user_id = u.id
@@ -346,6 +349,7 @@ pub async fn get_comments(
             u.display_name as author_display_name,
             u.username as author_username,
             c.parent_id,
+            COALESCE(c.is_edited, false) as is_edited,
             c.created_at
         FROM comments c
         JOIN users u ON c.user_id = u.id

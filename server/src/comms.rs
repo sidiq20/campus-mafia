@@ -17,6 +17,7 @@ pub struct ChatMessageResponse {
     pub author_name: String,
     pub author_display_name: Option<String>,
     pub faction_name: Option<String>,
+    pub is_edited: Option<bool>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -49,6 +50,7 @@ pub async fn get_global_chat(State(state): State<ServerState>) -> Json<Vec<ChatM
             u.username as author_name, 
             u.display_name as author_display_name,
             f.name as faction_name,
+            c.is_edited,
             c.created_at
         FROM chat_messages c
         JOIN users u ON c.user_id = u.id
@@ -98,6 +100,7 @@ pub async fn send_global_chat(
             u.username as author_name, 
             u.display_name as author_display_name,
             f.name as faction_name,
+            false as is_edited,
             i.created_at
         FROM inserted i
         JOIN users u ON i.user_id = u.id
@@ -173,6 +176,7 @@ pub async fn send_welcome_message(
             u.username as author_name, 
             u.display_name as author_display_name,
             f.name as faction_name,
+            false as is_edited,
             i.created_at
         FROM inserted i
         JOIN users u ON i.user_id = u.id
@@ -223,6 +227,7 @@ pub async fn send_faction_welcome_message(
             u.username as author_name, 
             u.display_name as author_display_name,
             f.name as faction_name,
+            false as is_edited,
             i.created_at
         FROM inserted i
         JOIN users u ON i.user_id = u.id
@@ -277,6 +282,7 @@ pub async fn get_faction_chat(
             u.username as author_name, 
             u.display_name as author_display_name,
             f.name as faction_name,
+            c.is_edited,
             c.created_at
         FROM chat_messages c
         JOIN users u ON c.user_id = u.id
@@ -339,6 +345,7 @@ pub async fn send_faction_chat(
             u.username as author_name, 
             u.display_name as author_display_name,
             f.name as faction_name,
+            false as is_edited,
             i.created_at
         FROM inserted i
         JOIN users u ON i.user_id = u.id
@@ -442,6 +449,7 @@ pub async fn edit_chat_message(
             u.username as author_name, 
             u.display_name as author_display_name,
             f.name as faction_name,
+            c.is_edited,
             c.created_at
         FROM chat_messages c
         JOIN users u ON c.user_id = u.id

@@ -27,6 +27,7 @@ type Post = {
   repost_count: number;
   has_boosted: boolean;
   has_reposted: boolean;
+  is_edited: boolean;
   created_at: string;
 };
 
@@ -37,6 +38,7 @@ type Comment = {
   author_display_name: string;
   author_username: string | null;
   parent_id: string | null;
+  is_edited: boolean;
   created_at: string;
 };
 
@@ -289,6 +291,7 @@ export default function PostDetailPage() {
                   {post.faction_name && !post.is_anonymous && <span className="text-zinc-800">·</span>}
                   <span className="text-xs text-zinc-600">
                     {post.created_at ? new Date(post.created_at).toLocaleString() : 'Just now'}
+                    {post.is_edited && <span className="text-[10px] text-zinc-600 italic ml-1">(edited)</span>}
                   </span>
                 </div>
               </div>
@@ -348,6 +351,7 @@ export default function PostDetailPage() {
                   hour: 'numeric', minute: '2-digit', hour12: true,
                   month: 'short', day: 'numeric', year: 'numeric'
                 }) : 'Just now'}
+                {post.is_edited && <span className="text-[10px] text-zinc-600 italic ml-1">(edited)</span>}
               </span>
             </div>
 
@@ -538,6 +542,7 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
                 </button>
               )}
               {formatTimeAgo(comment.created_at)}
+              {comment.is_edited && <span className="text-[10px] text-zinc-600 italic ml-1">(edited)</span>}
             </span>
           </div>
           {isEditingComment ? (
@@ -643,6 +648,7 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
         author_display_name: user?.display_name || user?.username || 'You',
         author_username: user?.username || null,
         parent_id: parentId,
+        is_edited: false,
         created_at: new Date().toISOString(),
       };
 

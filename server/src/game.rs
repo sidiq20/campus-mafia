@@ -393,6 +393,7 @@ pub struct FactionResponse {
     pub description: Option<String>,
     pub influence: i32,
     pub member_count: Option<i64>,
+    pub territory_count: Option<i64>,
 }
 
 pub async fn get_factions(State(state): State<ServerState>) -> Json<Vec<FactionResponse>> {
@@ -411,7 +412,8 @@ pub async fn get_factions(State(state): State<ServerState>) -> Json<Vec<FactionR
             f.name, 
             f.description, 
             f.influence,
-            (SELECT COUNT(*) FROM users u WHERE u.faction_id = f.id) as member_count
+            (SELECT COUNT(*) FROM users u WHERE u.faction_id = f.id) as member_count,
+            (SELECT COUNT(*) FROM territories t WHERE t.controlling_faction_id = f.id) as territory_count
         FROM factions f
         ORDER BY f.influence DESC
         "#

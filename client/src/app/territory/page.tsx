@@ -46,6 +46,7 @@ type Faction = {
   name: string;
   influence: number;
   member_count: number;
+  territory_count: number;
 };
 
 type RaidPlan = {
@@ -509,12 +510,10 @@ export default function TerritoryPage() {
 
   const activeRaids = plannedRaids || [];
 
-  // Count territories per faction
-  const factionTerritories: Record<string, number> = {};
-  territories?.forEach(t => {
-    if (t.controlling_faction_name) {
-      factionTerritories[t.controlling_faction_name] = (factionTerritories[t.controlling_faction_name] || 0) + 1;
-    }
+  // Build faction territory count lookup from the enhanced factions data
+  const factionTerritoryCount: Record<string, number> = {};
+  factions?.forEach(f => {
+    factionTerritoryCount[f.name] = f.territory_count || 0;
   });
 
   // Open action modal for a territory
@@ -770,7 +769,7 @@ export default function TerritoryPage() {
                   {t.controlling_faction_name && (
                     <div className="flex items-center justify-between mb-4">
                       <div className="text-[9px] text-zinc-600">
-                        {factionTerritories[t.controlling_faction_name] || 0} zone{(factionTerritories[t.controlling_faction_name] || 0) !== 1 ? 's' : ''} controlled
+                        {factionTerritoryCount[t.controlling_faction_name] || 0} zone{(factionTerritoryCount[t.controlling_faction_name] || 0) !== 1 ? 's' : ''} controlled
                       </div>
                       <div className="text-[9px] text-yellow-500 font-mono font-bold">
                         {t.faction_influence?.toLocaleString() || '?'} INF
@@ -1044,9 +1043,16 @@ export default function TerritoryPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 text-xs font-mono">
+                    <div className="flex items-center gap-3 sm:gap-4 text-xs font-mono">
                       <span className="text-yellow-500 font-bold">{faction.influence.toLocaleString()} INF</span>
-                      <span className="text-zinc-600">{factionTerritories[faction.name] || 0} zones</span>
+                      <span className="text-zinc-500 flex items-center gap-1">
+                        <Shield size={10} />
+                        {faction.territory_count || 0} zone{(faction.territory_count || 0) !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-zinc-600 flex items-center gap-1">
+                        <Users size={10} />
+                        {faction.member_count || 0} mem
+                      </span>
                     </div>
                   </div>
                 );

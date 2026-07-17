@@ -453,6 +453,7 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
 }) {
   const { user } = useUser();
   const [text, setText] = useState('');
+  const queryClient = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -464,12 +465,51 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
       if (!res.ok) throw new Error('Failed to reply');
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async () => {
+      // Cancel outgoing refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['comments', postId] });
+
+      // Snapshot previous comments
+      const previousComments = queryClient.getQueryData<Comment[]>(['comments', postId]);
+
+      // Optimistically add the new comment
+      const optimisticComment: Comment = {
+        id: `optimistic-${Date.now()}`,
+        post_id: postId,
+        content: text.trim(),
+        author_display_name: user?.display_name || user?.username || 'You',
+        author_username: user?.username || null,
+        parent_id: parentId,
+        created_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData<Comment[]>(['comments', postId], (old) => {
+        return old ? [...old, optimisticComment] : [optimisticComment];
+      });
+
+      return { previousComments };
+    },
+    onSuccess: (data) => {
       setText('');
+      // Replace the optimistic comment with the real server response
+      queryClient.setQueryData<Comment[]>(['comments', postId], (old) => {
+        if (!old) return [data];
+        return old.map(c => c.id.startsWith('optimistic-') ? data : c);
+      });
       onSuccess();
       toast.success('Reply added (+2 INF)');
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed')
+    onError: (err, _, context) => {
+      // Roll back to previous state
+      if (context?.previousComments) {
+        queryClient.setQueryData(['comments', postId], context.previousComments);
+      }
+      toast.error(err instanceof Error ? err.message : 'Failed');
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['comments', postId] });
+    },
   });
 
   const sendingRef = useRef(false);

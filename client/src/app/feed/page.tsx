@@ -435,8 +435,32 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
         body: JSON.stringify({ content: commentText })
       });
       if (!res.ok) throw new Error('Failed to comment');
+      return res.json();
     },
-    onMutate: () => { commentSendingRef.current = true; },
+    onMutate: async () => {
+      commentSendingRef.current = true;
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['comments', post.id] });
+
+      // Snapshot previous comments
+      const previousComments = queryClient.getQueryData<Comment[]>(['comments', post.id]);
+
+      // Optimistically add the comment
+      const optimisticComment: Comment = {
+        id: `opt-${Date.now()}`,
+        post_id: post.id,
+        content: commentText.trim(),
+        author_username: user?.username || null,
+        author_name: user?.display_name || user?.username || 'You',
+        created_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData<Comment[]>(['comments', post.id], (old) => {
+        return old ? [...old, optimisticComment] : [optimisticComment];
+      });
+
+      return { previousComments };
+    },
     onSuccess: () => {
       setCommentText('');
       queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
@@ -444,10 +468,17 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       queryClient.invalidateQueries({ queryKey: ['me'] });
       toast.success("Comment added (+2 INF)");
     },
-    onError: (err) => {
+    onError: (err, _, context) => {
+      // Roll back optimistic update
+      if (context?.previousComments) {
+        queryClient.setQueryData(['comments', post.id], context.previousComments);
+      }
       toast.error(err instanceof Error ? err.message : 'Failed to send reply. Try again.');
     },
-    onSettled: () => { commentSendingRef.current = false; },
+    onSettled: () => {
+      commentSendingRef.current = false;
+      queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
+    },
   });
 
   const handleCardClick = (e: React.MouseEvent) => {

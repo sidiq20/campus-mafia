@@ -706,6 +706,7 @@ async fn main() {
         .route("/api/groups/:id/members/:user_id/remove", axum::routing::post(group_chats::remove_group_member))
         .route("/api/groups/:id/members/:user_id/promote", axum::routing::post(group_chats::promote_to_admin))
         .route("/api/groups/:id/messages", axum::routing::post(group_chats::send_group_message).get(group_chats::get_group_messages))
+        .route("/api/groups/:group_id/messages/:message_id", axum::routing::put(group_chats::edit_group_message))
         .route("/api/groups/:id/update", axum::routing::post(group_chats::update_group))
 
         // Multi-device Sync

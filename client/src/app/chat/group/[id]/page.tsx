@@ -8,7 +8,7 @@ import { MentionText } from '@/components/MentionText';
 import { apiFetch, WS_URL } from '@/lib/api';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
-import { Send, ArrowLeft, Users, X, UserPlus, Crown, ShieldAlert, Trash2, Edit3, Save } from 'lucide-react';
+import { Send, ArrowLeft, Users, X, UserPlus, Crown, ShieldAlert, Trash2, Edit3, Save, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type GroupMessage = {
@@ -18,6 +18,7 @@ type GroupMessage = {
   content: string;
   author_name: string;
   display_name: string;
+  is_edited: boolean;
   created_at: string;
 };
 
@@ -47,6 +48,8 @@ export default function GroupChatPage() {
   const [showMembers, setShowMembers] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [sendingLock, setSendingLock] = useState(false);
+  const [editingDmId, setEditingDmId] = useState<string | null>(null);
+  const [editDmText, setEditDmText] = useState('');
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -125,6 +128,35 @@ export default function GroupChatPage() {
     onError: (err: Error) => toast.error(err.message)
   });
 
+  const editGroupMsgMutation = useMutation({
+    mutationFn: async ({ messageId, content }: { messageId: string; content: string }) => {
+      const res = await apiFetch(`/api/groups/${id}/messages/${messageId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+      return res.json();
+    },
+    onMutate: async ({ messageId, content }) => {
+      await queryClient.cancelQueries({ queryKey: ['group-chat', id] });
+      const previousMessages = queryClient.getQueryData<GroupMessage[]>(['group-chat', id]);
+      queryClient.setQueryData<GroupMessage[]>(['group-chat', id], (old) =>
+        old?.map(m => m.id === messageId ? { ...m, content } : m)
+      );
+      setEditingDmId(null);
+      return { previousMessages };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previousMessages) queryClient.setQueryData(['group-chat', id], context.previousMessages);
+      toast.error(err.message || 'Edit failed');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['group-chat', id] }),
+  });
+
   const addMemberMutation = useMutation({
     mutationFn: async (username: string) => {
       const res = await apiFetch(`/api/groups/${id}/members/add`, {
@@ -185,6 +217,7 @@ export default function GroupChatPage() {
               content: data.content,
               author_name: data.author_name,
               display_name: data.display_name,
+              is_edited: false,
               created_at: data.created_at || new Date().toISOString(),
             };
             return [...old, newMsg];
@@ -303,24 +336,72 @@ export default function GroupChatPage() {
               <div className="text-center text-zinc-600 text-xs py-12 font-mono italic">No messages yet. Send the first one.</div>
             ) : messages?.map(msg => {
               const myMsg = msg.user_id === user?.id;
+              const isEditing = editingDmId === msg.id;
               return (
-                <div key={msg.id} className={`flex ${myMsg ? 'justify-end' : 'justify-start'}`}>
+                <div key={msg.id} className={`flex ${myMsg ? 'justify-end' : 'justify-start'} group`}>
                   <div className="max-w-[80%]">
                     {!myMsg && (
                       <Link href={`/profile/${msg.author_name}`} className="text-[10px] font-bold text-zinc-500 hover:text-green-400 mb-1 block transition-colors">
                         @{msg.display_name}
                       </Link>
                     )}
-                    <div className={`px-4 py-2.5 rounded-lg border ${
-                      myMsg ? 'bg-purple-500/10 border-purple-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800'
-                    }`}>
-                      <p className="text-sm text-zinc-100 font-mono"><MentionText text={msg.content} /></p>
-                      <div className="flex justify-end mt-1">
-                        <span className="text-[9px] text-zinc-500">
-                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                    {isEditing ? (
+                      <div className={`px-4 py-2.5 rounded-lg border ${
+                        myMsg ? 'bg-purple-500/10 border-purple-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800'
+                      }`}>
+                        <textarea
+                          value={editDmText}
+                          onChange={e => setEditDmText(e.target.value)}
+                          className="w-full bg-zinc-900 border border-purple-500/50 rounded-lg p-2 text-sm text-zinc-200 outline-none resize-none mb-2"
+                          rows={2}
+                          autoFocus
+                        />
+                        <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => setEditingDmId(null)}
+                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (editDmText.trim()) {
+                                editGroupMsgMutation.mutate({ messageId: msg.id, content: editDmText.trim() });
+                              }
+                            }}
+                            disabled={editGroupMsgMutation.isPending || !editDmText.trim() || editDmText.trim() === msg.content}
+                            className="px-3 py-1 bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded text-[10px] font-bold transition-all"
+                          >
+                            {editGroupMsgMutation.isPending ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className={`px-4 py-2.5 rounded-lg border ${
+                        myMsg ? 'bg-purple-500/10 border-purple-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800'
+                      }`}>
+                        <p className="text-sm text-zinc-100 font-mono"><MentionText text={msg.content} /></p>
+                        <div className="flex items-center justify-between mt-1">
+                          <div className="flex items-center gap-1">
+                            {myMsg && !isEditing && (
+                              <button
+                                onClick={() => { setEditDmText(msg.content); setEditingDmId(msg.id); }}
+                                className="text-[9px] text-zinc-600 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Edit"
+                              >
+                                <Edit2 size={11} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {msg.is_edited && <span className="text-[9px] text-zinc-600 italic">(edited)</span>}
+                            <span className="text-[9px] text-zinc-500">
+                              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

@@ -25,6 +25,7 @@ pub struct GroupChatMessage {
     pub content: String,
     pub author_name: String,
     pub display_name: String,
+    pub is_edited: Option<bool>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -376,6 +377,7 @@ pub async fn send_group_message(
             i.id, i.group_id, i.user_id, i.content,
             u.username as author_name,
             COALESCE(u.display_name, u.username) as display_name,
+            false as is_edited,
             i.created_at
         FROM inserted i
         JOIN users u ON i.user_id = u.id
@@ -584,6 +586,7 @@ pub async fn get_group_messages(
             m.id, m.group_id, m.user_id, m.content,
             u.username as author_name,
             COALESCE(u.display_name, u.username) as display_name,
+            COALESCE(m.is_edited, false) as is_edited,
             m.created_at
         FROM group_chat_messages m
         JOIN users u ON m.user_id = u.id
@@ -598,4 +601,82 @@ pub async fn get_group_messages(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(messages))
+}
+
+#[derive(Deserialize)]
+pub struct EditGroupMessageRequest {
+    pub content: String,
+}
+
+pub async fn edit_group_message(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path((group_id, message_id)): Path<(uuid::Uuid, uuid::Uuid)>,
+    Json(payload): Json<EditGroupMessageRequest>,
+) -> Result<Json<GroupChatMessage>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    if payload.content.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Content cannot be empty".to_string()));
+    }
+
+    // Verify membership and ownership
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_chat_members WHERE group_id = $1 AND user_id = $2)"
+    )
+    .bind(group_id)
+    .bind(auth_user.user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
+
+    if !is_member {
+        return Err((StatusCode::FORBIDDEN, "Not a member of this group".to_string()));
+    }
+
+    // Verify ownership of the message
+    let owner_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_chat_messages WHERE id = $1 AND group_id = $2"
+    )
+    .bind(message_id)
+    .bind(group_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    if owner_id != Some(auth_user.user_id) {
+        return Err((StatusCode::FORBIDDEN, "Not authorized to edit this message".to_string()));
+    }
+
+    // Update content + edited flag
+    sqlx::query(
+        "UPDATE group_chat_messages SET content = $1, is_edited = true WHERE id = $2"
+    )
+    .bind(&payload.content)
+    .bind(message_id)
+    .execute(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Return updated message
+    let msg = sqlx::query_as::<_, GroupChatMessage>(
+        r#"
+        SELECT 
+            m.id, m.group_id, m.user_id, m.content,
+            u.username as author_name,
+            COALESCE(u.display_name, u.username) as display_name,
+            COALESCE(m.is_edited, false) as is_edited,
+            m.created_at
+        FROM group_chat_messages m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.id = $1
+        "#
+    )
+    .bind(message_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(msg))
 }

@@ -29,6 +29,7 @@ export type UserProfile = {
   pinned_post_id: string | null;
   pinned_post_content: string | null;
   created_at: string;
+  bounty_total: number;
 };
 
 type UserContextType = {

@@ -265,6 +265,7 @@ pub struct UserProfile {
     pub pinned_post_id: Option<uuid::Uuid>,
     pub pinned_post_content: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub bounty_total: i64,
 }
 
 pub async fn get_user_by_username(
@@ -330,6 +331,15 @@ pub async fn get_user_by_username(
         None
     };
 
+    // Fetch active bounty total on this user
+    let bounty_total: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(b.amount), 0) FROM bounties b WHERE b.target_user_id = $1 AND b.status = 'active'"#
+    )
+    .bind(row.id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
     let profile = UserProfile {
         id: row.id,
         display_name: row.display_name,
@@ -346,6 +356,7 @@ pub async fn get_user_by_username(
         pinned_post_id: row.pinned_post_id,
         pinned_post_content: pinned_content,
         created_at: row.created_at,
+        bounty_total,
     };
 
     Ok(Json(profile))
@@ -412,6 +423,15 @@ pub async fn me(
         None
     };
 
+    // Fetch active bounty total on this user
+    let bounty_total: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(b.amount), 0) FROM bounties b WHERE b.target_user_id = $1 AND b.status = 'active'"#
+    )
+    .bind(auth_user.user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
     let profile = UserProfile {
         id: row.id,
         display_name: row.display_name,
@@ -428,6 +448,7 @@ pub async fn me(
         pinned_post_id: row.pinned_post_id,
         pinned_post_content: pinned_content,
         created_at: row.created_at,
+        bounty_total,
     };
 
     Ok(Json(profile))

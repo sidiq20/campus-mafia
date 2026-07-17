@@ -165,36 +165,48 @@ export default function LocalP2PChatPage() {
       </header>
 
       <div className="flex-1 flex flex-col overflow-hidden bg-[#050505]">
-        {/* Online users bar - available for P2P connection */}
-        {otherOnlineUsers.length > 0 && (
-          <div className="px-4 py-2.5 border-b border-zinc-800 bg-black/30 flex items-center gap-2 overflow-x-auto">
-            <Wifi size={12} className="text-green-500 shrink-0" />
-            <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold shrink-0 mr-1">Online:</span>
-            {otherOnlineUsers.slice(0, 10).map(username => {
-              const isConnected = connectedPeers.includes(username);
-              return (
-                <button
-                  key={username}
-                  onClick={() => !isConnected && handleConnectToPeer(username)}
-                  disabled={isConnected}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all shrink-0 ${
-                    isConnected
-                      ? 'bg-green-500/10 text-green-400 border border-green-500/30 cursor-default'
-                      : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:bg-green-500/10 hover:text-green-400 hover:border-green-500/30 cursor-pointer'
-                  }`}
-                  title={isConnected ? 'Connected via P2P' : 'Click to connect via P2P'}
-                >
-                  <User size={10} />
-                  @{username}
-                  {isConnected && <Wifi size={10} className="text-green-500" />}
-                </button>
-              );
-            })}
-            {otherOnlineUsers.length > 10 && (
-              <span className="text-[9px] text-zinc-600 shrink-0">+{otherOnlineUsers.length - 10} more</span>
-            )}
-          </div>
-        )}
+        {/* Online users bar — always visible, shows who's available */}
+        <div className="px-4 py-2.5 border-b border-zinc-800 bg-black/30">
+          {otherOnlineUsers.length > 0 ? (
+            <div className="flex items-center gap-2 overflow-x-auto">
+              <Wifi size={12} className="text-green-500 shrink-0 animate-pulse" />
+              <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold shrink-0 mr-1">
+                {otherOnlineUsers.length} online:
+              </span>
+              {otherOnlineUsers.slice(0, 10).map(username => {
+                const isConnected = connectedPeers.includes(username);
+                return (
+                  <button
+                    key={username}
+                    onClick={() => !isConnected && handleConnectToPeer(username)}
+                    disabled={isConnected}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all shrink-0 ${
+                      isConnected
+                        ? 'bg-green-500/10 text-green-400 border border-green-500/30 cursor-default'
+                        : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:bg-green-500/10 hover:text-green-400 hover:border-green-500/30 cursor-pointer'
+                    }`}
+                    title={isConnected ? 'Connected via P2P' : 'Click to connect via P2P'}
+                  >
+                    <User size={10} />
+                    @{username}
+                    {isConnected && <Wifi size={10} className="text-green-500" />}
+                  </button>
+                );
+              })}
+              {otherOnlineUsers.length > 10 && (
+                <span className="text-[9px] text-zinc-600 shrink-0">+{otherOnlineUsers.length - 10} more</span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-zinc-600">
+              <Wifi size={12} className="text-zinc-700" />
+              <span className="text-[9px] uppercase tracking-widest font-bold">No operatives online nearby</span>
+              <span className="text-[8px] text-zinc-700 ml-auto">
+                Share this app with friends to populate the local network
+              </span>
+            </div>
+          )}
+        </div>
 
         {/* Radar map */}
         {showRadar && (
@@ -208,13 +220,62 @@ export default function LocalP2PChatPage() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Radio size={40} className="text-zinc-800 mb-4" />
               <p className="text-sm text-zinc-600 font-mono italic">No local messages yet.</p>
-              <p className="text-[10px] text-zinc-700 mt-2">
+              <p className="text-[10px] text-zinc-700 mt-2 max-w-md">
                 {peerCount > 0
                   ? `Connected to ${peerCount} peer${peerCount > 1 ? 's' : ''} — send a message to the local area!`
                   : otherOnlineUsers.length > 0
-                    ? `${otherOnlineUsers.length} operative${otherOnlineUsers.length > 1 ? 's' : ''} online — click a name above to connect via P2P`
-                    : 'Waiting for nearby operatives to connect...'}
+                    ? `${otherOnlineUsers.length} operative${otherOnlineUsers.length > 1 ? 's' : ''} online — click a name above to connect and chat`
+                    : 'No one else is online right now. Invite friends or check back later.'}
               </p>
+              {/* Join CTA when no peers */}
+              {otherOnlineUsers.length === 0 && !peerCount && (
+                <div className="mt-6 border border-dashed border-zinc-800 rounded-lg p-6 max-w-sm w-full">
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold mb-3">How to connect</p>
+                  <ol className="text-left space-y-2 text-[10px] text-zinc-500">
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 font-bold">1.</span>
+                      <span>Make sure you and your friends are <strong className="text-zinc-400">signed in</strong> to the app</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 font-bold">2.</span>
+                      <span>Open this <strong className="text-zinc-400">Local Area Chat</strong> page — you'll appear online to others</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 font-bold">3.</span>
+                      <span>Enable <strong className="text-zinc-400">location sharing</strong> to see nearby operatives on the radar</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 font-bold">4.</span>
+                      <span><strong className="text-zinc-400">Click any name</strong> in the online bar to establish a P2P connection</span>
+                    </li>
+                  </ol>
+                  <button
+                    onClick={() => setShowRadar(true)}
+                    className="mt-4 w-full py-2 bg-green-500/10 border border-green-500/30 rounded-lg text-[10px] font-bold text-green-400 hover:bg-green-500/20 transition-all"
+                  >
+                    <MapIcon size={12} className="inline mr-1.5" />
+                    Open Radar Scanner
+                  </button>
+                </div>
+              )}
+              {/* Show connectable users CTA */}
+              {otherOnlineUsers.length > 0 && peerCount === 0 && (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <span className="text-[9px] text-zinc-600 uppercase tracking-widest font-bold w-full mb-1">
+                    Click to connect:
+                  </span>
+                  {otherOnlineUsers.slice(0, 8).map(username => (
+                    <button
+                      key={username}
+                      onClick={() => handleConnectToPeer(username)}
+                      className="px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-lg text-[10px] font-bold text-green-400 hover:bg-green-500/20 transition-all"
+                    >
+                      <User size={10} className="inline mr-1" />
+                      @{username}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             messages.map((msg, i) => {

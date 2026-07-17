@@ -21,7 +21,7 @@ type Post = {
 };
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
-import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award, MessageSquare, Radio, TrendingUp, BookOpen, Pin, Smartphone, Monitor, Apple, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award, MessageSquare, Radio, TrendingUp, BookOpen, Pin, Smartphone, Monitor, Apple, Download, ChevronDown, ChevronUp, Skull } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
 import { TitleSection } from '@/components/TitleBadge';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
@@ -228,18 +228,25 @@ export default function ProfilePage() {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {[
               { label: 'Influence', value: user.influence, icon: Zap, color: 'text-yellow-500' },
               { label: 'Reputation', value: user.reputation, icon: Target, color: 'text-blue-500' },
               { label: 'Heat Level', value: `${user.heat_level}%`, icon: AlertTriangle, color: 'text-red-500' },
+              { label: 'Bounty', value: user.bounty_total ?? 0, icon: Skull, color: 'text-red-500', link: user.bounty_total > 0 ? '/bounties' : undefined },
             ].map((stat, i) => (
               <div key={i} className="border border-zinc-800 bg-zinc-900/30 p-5 rounded-xl hover:border-zinc-700 transition-colors">
                 <div className="flex items-center gap-2 mb-3">
                   <stat.icon className={stat.color} size={20} />
                   <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{stat.label}</h3>
                 </div>
-                <p className="text-3xl font-bold text-white">{stat.value}</p>
+                {stat.link ? (
+                  <Link href={stat.link} className="text-3xl font-bold text-red-500 hover:text-red-400 transition-colors">
+                    {stat.value} INF
+                  </Link>
+                ) : (
+                  <p className="text-3xl font-bold text-white">{stat.value}</p>
+                )}
               </div>
             ))}
           </div>

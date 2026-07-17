@@ -121,8 +121,7 @@ pub async fn place_bounty(
         "amount": payload.amount,
         "target_username": payload.target_username,
     })))
-}/// Collect a bounty. Requires the user to have an active `bounty_hunter` effect
-/// (activated by consuming a `bounty_kill` item from the Black Market).
+}/// Collect a bounty. Anyone can collect any active bounty (no special status required).
 pub async fn collect_bounty(
     auth_user: AuthUser,
     State(state): State<ServerState>,
@@ -130,20 +129,6 @@ pub async fn collect_bounty(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let pool = &state.pool;
     let user_id = auth_user.user_id;
-
-    // Check the user has an active bounty_hunter effect (from using a bounty_kill item)
-    let has_hunter_status: bool = sqlx::query_scalar::<_, Option<bool>>(
-        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'bounty_hunter' AND expires_at > NOW())"
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .unwrap_or(false);
-
-    if !has_hunter_status {
-        return Err((StatusCode::FORBIDDEN, "You need bounty hunter status to collect bounties. Purchase and use a 'bounty_kill' item from the Black Market.".to_string()));
-    }
 
     // Get bounty info
     #[derive(sqlx::FromRow)]
@@ -399,20 +384,6 @@ pub async fn collect_bounty_by_target(
 
     if target_id == user_id {
         return Err((StatusCode::BAD_REQUEST, "You cannot collect bounties on yourself".to_string()));
-    }
-
-    // Check bounty hunter status
-    let has_hunter_status: bool = sqlx::query_scalar::<_, Option<bool>>(
-        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'bounty_hunter' AND expires_at > NOW())"
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .unwrap_or(false);
-
-    if !has_hunter_status {
-        return Err((StatusCode::FORBIDDEN, "You need bounty hunter status to collect bounties. Purchase and use a 'bounty_kill' item from the Black Market.".to_string()));
     }
 
     // Find target user ID

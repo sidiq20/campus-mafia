@@ -5,7 +5,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
-import { User, Shield, Zap, Target, AlertTriangle, Radio, MessageSquare, Pin, Send, Loader2, X } from 'lucide-react';
+import { User, Shield, Zap, Target, AlertTriangle, Radio, MessageSquare, Pin, Send, Loader2, X, Skull } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -142,7 +142,7 @@ export default function UserProfilePage() {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="border border-zinc-800 bg-black/40 p-5 rounded">
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="text-yellow-500" size={18} />
@@ -166,6 +166,18 @@ export default function UserProfilePage() {
               </div>
               <p className="text-3xl font-bold text-zinc-100">{user.heat_level}%</p>
             </div>
+
+            {user.bounty_total > 0 && (
+              <div className="border border-red-500/30 bg-red-500/5 p-5 rounded">
+                <div className="flex items-center gap-2 mb-3">
+                  <Skull className="text-red-500" size={18} />
+                  <h3 className="text-sm font-bold text-zinc-400 uppercase">Bounty</h3>
+                </div>
+                <Link href="/bounties" className="text-3xl font-bold text-red-500 hover:text-red-400 transition-colors">
+                  {user.bounty_total} INF
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Their Broadcasts */}

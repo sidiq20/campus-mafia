@@ -64,17 +64,6 @@ export default function BountiesPage() {
   });
 
   // Check if user has active bounty hunter status (from using a bounty_kill item)
-  const { data: hunterStatus } = useQuery<{ active: boolean; expires_at: string | null }>({
-    queryKey: ['bounty-hunter-status'],
-    queryFn: async () => {
-      const res = await apiFetch('/api/bounties/hunter-status');
-      return res.ok ? res.json() : { active: false, expires_at: null };
-    },
-    staleTime: 30_000,
-    enabled: !!user,
-  });
-
-  const hasBountyHunter = hunterStatus?.active ?? false;
 
   const collectBountyMutation = useMutation({
     mutationFn: async (bountyId: string) => {
@@ -171,48 +160,38 @@ export default function BountiesPage() {
             </div>
           )}
 
-          {/* Bounty Hunter status banner */}
+          {/* Info banner — anyone can collect */}
           {user && (
-            <div className={`px-4 py-3 rounded-lg border text-xs flex items-center gap-3 ${
-              hasBountyHunter
-                ? 'border-green-500/30 bg-green-950/10 text-green-400'
-                : 'border-yellow-500/20 bg-yellow-950/10 text-yellow-400'
-            }`}>
+            <div className="px-4 py-3 rounded-lg border border-green-500/20 bg-green-950/10 text-green-400 text-xs flex items-center gap-3">
               <ShieldAlert size={16} />
               <div>
-                {hasBountyHunter ? (
-                  <>Active <span className="font-bold">Bounty Hunter</span> status — you can collect bounties!</>
-                ) : (
-                  <><span className="font-bold">Need Bounty Hunter status?</span> Purchase a <span className="font-bold">bounty_kill</span> item from the <Link href="/black-market" className="underline hover:text-green-400">Black Market</Link> and use it from your <Link href="/inventory" className="underline hover:text-green-400">Inventory</Link>.</>
-                )}
+                Anyone can collect bounties — no special status needed. Just find a target and collect!
               </div>
             </div>
           )}
 
-          {/* Collect by Target */}
-          {hasBountyHunter && (
-            <div className="border border-red-500/20 bg-red-950/10 p-4 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <UserAutocomplete
-                    value={collectTarget}
-                    onChange={setCollectTarget}
-                    placeholder="Collect bounties on target..."
-                  />
-                </div>
-                <button
-                  onClick={() => collectByTargetMutation.mutate()}
-                  disabled={!collectTarget.trim() || collectByTargetMutation.isPending}
-                  className="px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5"
-                >
-                  {collectByTargetMutation.isPending ? 'Collecting...' : 'Collect All'}
-                </button>
+          {/* Collect by Target — always available */}
+          <div className="border border-red-500/20 bg-red-950/10 p-4 rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <UserAutocomplete
+                  value={collectTarget}
+                  onChange={setCollectTarget}
+                  placeholder="Collect bounties on target..."
+                />
               </div>
-              <p className="text-[9px] text-zinc-600 mt-2">
-                Collect all active bounties on a target in one click. You must have active Bounty Hunter status.
-              </p>
+              <button
+                onClick={() => collectByTargetMutation.mutate()}
+                disabled={!collectTarget.trim() || collectByTargetMutation.isPending}
+                className="px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5"
+              >
+                {collectByTargetMutation.isPending ? 'Collecting...' : 'Collect All'}
+              </button>
             </div>
-          )}
+            <p className="text-[9px] text-zinc-600 mt-2">
+              Collect all active bounties on a target in one click.
+            </p>
+          </div>
 
           {/* Filter by target */}
           <div className="flex items-center gap-3">
@@ -257,7 +236,7 @@ export default function BountiesPage() {
                 const expiresIn = Math.max(0, Math.floor((new Date(b.expires_at).getTime() - Date.now()) / 3600000));
                 const isMyPlacer = user?.id === b.placed_by_user_id;
                 const isMyTarget = user?.id === b.target_user_id;
-                const canCollect = user && !isMyPlacer && !isMyTarget && hasBountyHunter;
+                const canCollect = user && !isMyPlacer && !isMyTarget;
 
                 return (
                   <div

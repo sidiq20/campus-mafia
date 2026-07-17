@@ -8,6 +8,7 @@ import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
 import { Swords, Skull, User, Target, Zap, Clock, X, Crosshair, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
+import UserAutocomplete from '@/components/UserAutocomplete';
 
 type Bounty = {
   id: string;
@@ -117,11 +118,10 @@ export default function BountiesPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 block">Target Username</label>
-                    <input
+                    <UserAutocomplete
                       value={targetUsername}
-                      onChange={e => setTargetUsername(e.target.value)}
-                      placeholder="username..."
-                      className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-red-500/50 text-zinc-200 placeholder-zinc-600"
+                      onChange={setTargetUsername}
+                      placeholder="Search by username..."
                     />
                   </div>
                   <div>

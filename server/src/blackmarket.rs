@@ -12,6 +12,55 @@ pub struct InventoryItem {
     pub quantity: i32,
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ActiveEffect {
+    pub effect_id: String,
+    pub target_type: String,
+    pub target_id: uuid::Uuid,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn get_active_effects(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+) -> Json<Vec<ActiveEffect>> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    // Fetch user's faction ID for faction-level effects
+    let user_faction: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT faction_id FROM users WHERE id = $1"
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
+
+    // Get all user-targeted effects + faction-targeted effects belonging to user's faction
+    let effects = sqlx::query_as::<_, ActiveEffect>(
+        r#"
+        SELECT effect_id, target_type, target_id, expires_at
+        FROM active_effects
+        WHERE (
+          (target_type = 'user' AND target_id = $1)
+          OR (target_type = 'faction' AND target_id = $2 AND effect_id IN ('smoke_screen', 'ddos_attack'))
+          OR (target_type = 'territory' AND target_id IN (SELECT id FROM territories WHERE controlling_faction_id = $2) AND effect_id = 'emp_mine')
+        )
+        AND expires_at > NOW()
+        ORDER BY expires_at ASC
+        "#
+    )
+    .bind(user_id)
+    .bind(user_faction)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    Json(effects)
+}
+
 pub async fn get_inventory(
     auth_user: AuthUser,
     State(state): State<ServerState>,

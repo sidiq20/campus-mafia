@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { apiFetch } from '@/lib/api';
@@ -10,6 +10,7 @@ import { Package, Bomb, Skull, Shield, Tag, Fingerprint, Zap, Infinity, Crosshai
 import Link from 'next/link';
 
 type InventoryItem = { item_id: string; quantity: number };
+type ActiveEffect = { effect_id: string; target_type: string; target_id: string; expires_at: string };
 type Territory = { id: string; name: string; controlling_faction_id: string | null; controlling_faction_name: string | null; defense_score: number };
 type Faction = { id: string; name: string; influence: number; member_count: number };
 
@@ -39,6 +40,15 @@ export default function InventoryPage() {
       return res.ok ? res.json() : [];
     },
     staleTime: 30_000,
+  });
+
+  const { data: activeEffects } = useQuery<ActiveEffect[]>({
+    queryKey: ['active-effects'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/blackmarket/active-effects');
+      return res.ok ? res.json() : [];
+    },
+    staleTime: 15_000,
   });
 
   const { data: territories } = useQuery<Territory[]>({
@@ -118,6 +128,32 @@ export default function InventoryPage() {
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-[#050505]">
         <div className="max-w-2xl mx-auto">
+
+          {/* Active Effects Section */}
+          {activeEffects && activeEffects.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-[10px] font-bold text-green-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                <Zap size={12} /> Active Effects
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {activeEffects.map(eff => {
+                  // Map effect IDs to item IDs for display
+                  const effectItemId = eff.effect_id === 'bounty_hunter' ? 'bounty_kill' : eff.effect_id;
+                  const meta = ITEM_META[effectItemId];
+                  return (
+                    <ActiveEffectBadge
+                      key={`${eff.effect_id}-${eff.target_id}`}
+                      title={meta?.title || eff.effect_id}
+                      expiresAt={eff.expires_at}
+                      color={meta?.color || 'text-green-400'}
+                      icon={meta?.icon || <Zap size={14} />}
+                      targetType={eff.target_type}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {ownedItems.length === 0 ? (
             <div className="text-center py-16">
@@ -260,5 +296,68 @@ export default function InventoryPage() {
         </div>
       )}
     </DashboardLayout>
+  );
+}
+
+function formatTimeRemaining(expiresAt: string, now: number): { text: string; urgent: boolean } {
+  const diff = new Date(expiresAt).getTime() - now;
+  if (diff <= 0) return { text: 'Expired', urgent: true };
+  const totalSec = Math.floor(diff / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+  if (hours > 0) return { text: `${hours}h ${minutes}m ${secs}s`, urgent: false };
+  if (minutes > 0) return { text: `${minutes}m ${secs}s`, urgent: minutes < 5 };
+  return { text: `${secs}s`, urgent: true };
+}
+
+function ActiveEffectBadge({ title, expiresAt, color, icon, targetType }: {
+  title: string;
+  expiresAt: string;
+  color: string;
+  icon: React.ReactNode;
+  targetType: string;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const { text, urgent } = formatTimeRemaining(expiresAt, now);
+
+  const targetLabel = targetType === 'faction' ? 'Faction' : targetType === 'territory' ? 'Territory' : 'Personal';
+
+  return (
+    <div className={`flex items-center gap-3 px-4 py-3 border rounded-lg transition-all ${
+      urgent
+        ? 'border-red-500/30 bg-red-950/10'
+        : 'border-green-500/20 bg-green-950/10'
+    }`}>
+      <div className={`${color} ${urgent ? 'animate-pulse' : ''}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-bold ${urgent ? 'text-red-400' : 'text-green-400'} truncate`}>
+            {title}
+          </span>
+          <span className={`text-[8px] uppercase tracking-widest font-bold ${
+            targetType === 'faction' ? 'text-purple-500' : targetType === 'territory' ? 'text-blue-500' : 'text-zinc-500'
+          }`}>
+            {targetLabel}
+          </span>
+        </div>
+        <div className={`text-[10px] font-mono mt-0.5 ${
+          urgent ? 'text-red-400 font-bold' : 'text-zinc-500'
+        }`}>
+          {text}
+          {urgent && text !== 'Expired' && (
+            <span className="ml-1.5 text-[8px] text-red-500 uppercase tracking-widest">expiring</span>
+          )}
+        </div>
+      </div>
+      <div className={`w-1.5 h-1.5 rounded-full ${urgent ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
+    </div>
   );
 }

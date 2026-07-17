@@ -675,6 +675,7 @@ async fn main() {
 
         // Black Market
         .route("/api/blackmarket/inventory", get(blackmarket::get_inventory))
+        .route("/api/blackmarket/active-effects", get(blackmarket::get_active_effects))
         .route("/api/blackmarket/purchase", axum::routing::post(blackmarket::purchase_item))
         .route("/api/blackmarket/use", axum::routing::post(blackmarket::use_item))
 

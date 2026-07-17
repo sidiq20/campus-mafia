@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut, Activity, Radio, TrendingUp, Package, Swords, Target } from 'lucide-react';
+import { MessageSquare, Map as MapIcon, Crosshair, Zap, Shield, Skull, Menu, X, Bell, User, LogOut, Activity, Radio, TrendingUp, Package, Swords, Target, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
@@ -303,6 +303,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NavItem href="/inventory" icon={<Package size={18} />} label="Inventory" active={pathname === '/inventory'} />
             <NavItem href="/black-market" icon={<Zap size={18} />} label="Black Market" active={pathname === '/black-market'} />
             <NavItem href="/profile" icon={<User size={18} />} label="Profile" active={pathname === '/profile'} />
+            <NavItem href="/profile/settings" icon={<Settings size={18} />} label="Settings" active={pathname === '/profile/settings'} />
           </nav>
         </div>
 

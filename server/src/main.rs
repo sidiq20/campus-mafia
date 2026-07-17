@@ -496,6 +496,8 @@ async fn main() {
         .route("/api/auth/logout", axum::routing::post(auth::logout))
         .route("/api/auth/me", get(auth::me).put(auth::update_profile))
         .route("/api/auth/username", axum::routing::put(auth::update_username))
+        .route("/api/auth/password", axum::routing::post(auth::change_password))
+        .route("/api/auth/account", axum::routing::delete(auth::delete_account))
         .route("/api/users/:username", get(auth::get_user_by_username))
         .route("/api/users/search", get(auth::search_users))
         .route("/api/users/online", get(ws::get_online_users))

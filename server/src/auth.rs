@@ -882,6 +882,98 @@ pub struct SignupCompleteRequest {
     pub faction_name: Option<String>,
 }
 
+// ─── Settings: Change Password ───
+
+#[derive(Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+pub async fn change_password(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    if payload.new_password.len() < 6 {
+        return Err((StatusCode::BAD_REQUEST, "New password must be at least 6 characters".to_string()));
+    }
+
+    // Get current password hash
+    let current_hash: String = sqlx::query_scalar(
+        "SELECT password_hash FROM users WHERE id = $1"
+    )
+    .bind(auth_user.user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Verify current password
+    let valid = verify(&payload.current_password, &current_hash)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if !valid {
+        return Err((StatusCode::UNAUTHORIZED, "Current password is incorrect".to_string()));
+    }
+
+    // Hash and update new password
+    let new_hash = hash(&payload.new_password, DEFAULT_COST)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
+        .bind(&new_hash)
+        .bind(auth_user.user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({"status": "ok"})))
+}
+
+// ─── Settings: Delete Account ───
+
+#[derive(Deserialize)]
+pub struct DeleteAccountRequest {
+    pub current_password: Option<String>,
+}
+
+pub async fn delete_account(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Json(payload): Json<DeleteAccountRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    // Verify password if provided
+    if let Some(password) = &payload.current_password {
+        let current_hash: String = sqlx::query_scalar(
+            "SELECT password_hash FROM users WHERE id = $1"
+        )
+        .bind(auth_user.user_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        let valid = verify(password, &current_hash)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        if !valid {
+            return Err((StatusCode::UNAUTHORIZED, "Incorrect password".to_string()));
+        }
+    }
+
+    // Delete the user and all associated data (cascading deletes handle the rest)
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(auth_user.user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({"status": "deleted"})))
+}
+
 pub async fn signup_complete(
     State(state): State<crate::ServerState>,
     Json(payload): Json<SignupCompleteRequest>,

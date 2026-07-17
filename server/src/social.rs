@@ -459,13 +459,14 @@ pub async fn get_faction_leaderboard(
         SELECT 
             f.id,
             f.name,
-            COALESCE(f.influence, 0) as influence,
-            COALESCE(mc.c, 0) as member_count,
+            COALESCE(SUM(u.influence), 0) as influence,
+            COUNT(DISTINCT u.id) as member_count,
             COALESCE(tc.c, 0) as territory_count
         FROM factions f
-        LEFT JOIN LATERAL (SELECT COUNT(*) as c FROM users u WHERE u.faction_id = f.id) mc ON true
+        LEFT JOIN users u ON u.faction_id = f.id
         LEFT JOIN LATERAL (SELECT COUNT(*) as c FROM territories t WHERE t.controlling_faction_id = f.id) tc ON true
-        ORDER BY f.influence DESC
+        GROUP BY f.id, f.name, tc.c
+        ORDER BY influence DESC
         LIMIT 10
         "#
     )

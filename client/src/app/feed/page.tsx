@@ -377,8 +377,21 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       });
       if (!res.ok) throw new Error('Failed to boost');
     },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['posts'] });
+      const previousPosts = queryClient.getQueryData<Post[]>(['posts']);
+      queryClient.setQueryData<Post[]>(['posts'], (old) =>
+        old?.map(p => p.id === post.id ? { ...p, has_boosted: true, boost_count: p.boost_count + 1 } : p)
+      );
+      return { previousPosts };
+    },
     onSuccess: () => {
       toast.success("Broadcast boosted (+1 INF)");
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousPosts) queryClient.setQueryData(['posts'], context.previousPosts);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
     }
@@ -390,12 +403,26 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       if (!res.ok) throw new Error('Failed to repost');
       return res.json();
     },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['posts'] });
+      const previousPosts = queryClient.getQueryData<Post[]>(['posts']);
+      queryClient.setQueryData<Post[]>(['posts'], (old) =>
+        old?.map(p => p.id === post.id ? {
+          ...p,
+          has_reposted: !p.has_reposted,
+          repost_count: p.repost_count + (p.has_reposted ? -1 : 1)
+        } : p)
+      );
+      return { previousPosts };
+    },
     onSuccess: (data) => {
       toast.success(data.status === 'reposted' ? 'Broadcast retransmitted' : 'Repost removed');
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
     },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Failed to repost');
+    onError: (_err, _vars, context) => {
+      if (context?.previousPosts) queryClient.setQueryData(['posts'], context.previousPosts);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
     }
   });
 

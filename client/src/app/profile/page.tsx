@@ -13,6 +13,8 @@ type Post = {
   is_anonymous: boolean | null;
   user_id: string | null;
   reply_count: number;
+  boost_count?: number;
+  repost_count?: number;
   has_boosted: boolean;
   has_reposted: boolean;
   created_at: string;
@@ -321,8 +323,22 @@ function ProfilePostCard({ post, isMine, queryClient }: { post: Post; isMine: bo
       });
       if (!res.ok) throw new Error('Failed to boost');
     },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['profile-posts'] });
+      const previousPosts = queryClient.getQueryData(['profile-posts']);
+      queryClient.setQueryData(['profile-posts'], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((p: Post) => p.id === post.id ? { ...p, has_boosted: true, boost_count: (p.boost_count || 0) + 1 } : p);
+      });
+      return { previousPosts };
+    },
     onSuccess: () => {
       toast.success("Boosted (+1 INF)");
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousPosts) queryClient.setQueryData(['profile-posts'], context.previousPosts);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['profile-posts'] });
     }
   });
@@ -333,8 +349,26 @@ function ProfilePostCard({ post, isMine, queryClient }: { post: Post; isMine: bo
       if (!res.ok) throw new Error('Failed to repost');
       return res.json();
     },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['profile-posts'] });
+      const previousPosts = queryClient.getQueryData(['profile-posts']);
+      queryClient.setQueryData(['profile-posts'], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((p: Post) => p.id === post.id ? {
+          ...p,
+          has_reposted: !p.has_reposted,
+          repost_count: (p.repost_count || 0) + (p.has_reposted ? -1 : 1)
+        } : p);
+      });
+      return { previousPosts };
+    },
     onSuccess: () => {
       toast.success('Repost toggled');
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousPosts) queryClient.setQueryData(['profile-posts'], context.previousPosts);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['profile-posts'] });
     }
   });

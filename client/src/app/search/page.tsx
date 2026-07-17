@@ -471,8 +471,21 @@ function SearchPostCard({ post, isMine }: { post: Post; isMine: boolean }) {
       });
       if (!res.ok) throw new Error('Failed to boost');
     },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['search-posts'] });
+      const previousPosts = queryClient.getQueryData<Post[]>(['search-posts']);
+      queryClient.setQueryData<Post[]>(['search-posts'], (old) =>
+        old?.map(p => p.id === post.id ? { ...p, has_boosted: true, boost_count: p.boost_count + 1 } : p)
+      );
+      return { previousPosts };
+    },
     onSuccess: () => {
       toast.success("Broadcast boosted (+1 INF)");
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousPosts) queryClient.setQueryData(['search-posts'], context.previousPosts);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['search-posts'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
     }
@@ -484,8 +497,25 @@ function SearchPostCard({ post, isMine }: { post: Post; isMine: boolean }) {
       if (!res.ok) throw new Error('Failed to repost');
       return res.json();
     },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['search-posts'] });
+      const previousPosts = queryClient.getQueryData<Post[]>(['search-posts']);
+      queryClient.setQueryData<Post[]>(['search-posts'], (old) =>
+        old?.map(p => p.id === post.id ? {
+          ...p,
+          has_reposted: !p.has_reposted,
+          repost_count: p.repost_count + (p.has_reposted ? -1 : 1)
+        } : p)
+      );
+      return { previousPosts };
+    },
     onSuccess: (data) => {
       toast.success(data.status === 'reposted' ? 'Broadcast retransmitted' : 'Repost removed');
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousPosts) queryClient.setQueryData(['search-posts'], context.previousPosts);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['search-posts'] });
     }
   });

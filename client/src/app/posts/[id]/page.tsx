@@ -97,8 +97,21 @@ export default function PostDetailPage() {
       });
       if (!res.ok) throw new Error('Failed to boost');
     },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['post', id] });
+      const previousPost = queryClient.getQueryData<Post>(['post', id]);
+      queryClient.setQueryData<Post>(['post', id], (old) =>
+        old ? { ...old, has_boosted: true, boost_count: old.boost_count + 1 } : old
+      );
+      return { previousPost };
+    },
     onSuccess: () => {
       toast.success("Broadcast boosted (+1 INF)");
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousPost) queryClient.setQueryData(['post', id], context.previousPost);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['post', id] });
     }
   });
@@ -109,12 +122,26 @@ export default function PostDetailPage() {
       if (!res.ok) throw new Error('Failed to repost');
       return res.json();
     },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['post', id] });
+      const previousPost = queryClient.getQueryData<Post>(['post', id]);
+      queryClient.setQueryData<Post>(['post', id], (old) =>
+        old ? {
+          ...old,
+          has_reposted: !old.has_reposted,
+          repost_count: old.repost_count + (old.has_reposted ? -1 : 1)
+        } : old
+      );
+      return { previousPost };
+    },
     onSuccess: (data) => {
       toast.success(data.status === 'reposted' ? 'Broadcast retransmitted' : 'Repost removed');
-      queryClient.invalidateQueries({ queryKey: ['post', id] });
     },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Failed to repost');
+    onError: (_err, _vars, context) => {
+      if (context?.previousPost) queryClient.setQueryData(['post', id], context.previousPost);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['post', id] });
     }
   });
 

@@ -363,6 +363,164 @@ pub async fn get_hunter_status(
     }))
 }
 
+#[derive(Deserialize)]
+pub struct CollectByTargetRequest {
+    pub target_username: String,
+}
+
+/// Collect all active bounties on a specific target user at once.
+pub async fn collect_bounty_by_target(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Json(payload): Json<CollectByTargetRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    let target_name = payload.target_username.trim();
+    if target_name.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Target username is required".to_string()));
+    }
+
+    // Check target exists and get their ID in one query
+    let target_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE username = $1"
+    )
+    .bind(target_name)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    let target_id = match target_id {
+        Some(id) => id,
+        None => return Err((StatusCode::NOT_FOUND, "Target user not found".to_string())),
+    };
+
+    if target_id == user_id {
+        return Err((StatusCode::BAD_REQUEST, "You cannot collect bounties on yourself".to_string()));
+    }
+
+    // Check bounty hunter status
+    let has_hunter_status: bool = sqlx::query_scalar::<_, Option<bool>>(
+        "SELECT EXISTS(SELECT 1 FROM active_effects WHERE target_type = 'user' AND target_id = $1 AND effect_id = 'bounty_hunter' AND expires_at > NOW())"
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .unwrap_or(false);
+
+    if !has_hunter_status {
+        return Err((StatusCode::FORBIDDEN, "You need bounty hunter status to collect bounties. Purchase and use a 'bounty_kill' item from the Black Market.".to_string()));
+    }
+
+    // Find target user ID
+    let target_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM users WHERE username = $1"
+    )
+    .bind(target_name)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Target user not found".to_string()))?;
+
+    if target_id == user_id {
+        return Err((StatusCode::BAD_REQUEST, "You cannot collect bounties on yourself".to_string()));
+    }
+
+    // Find all active bounties on this target that the collector is eligible to collect
+    #[derive(sqlx::FromRow)]
+    struct CollectibleBounty {
+        id: uuid::Uuid,
+        placed_by_user_id: uuid::Uuid,
+        amount: i32,
+    }
+
+    let bounties = sqlx::query_as::<_, CollectibleBounty>(
+        r#"
+        SELECT id, placed_by_user_id, amount
+        FROM bounties
+        WHERE target_user_id = $1
+          AND status = 'active'
+          AND placed_by_user_id != $2
+        ORDER BY amount DESC
+        "#
+    )
+    .bind(target_id)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if bounties.is_empty() {
+        return Err((StatusCode::NOT_FOUND, "No collectible bounties found on this target".to_string()));
+    }
+
+    let mut tx = pool.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut total_collected = 0;
+    let mut count = 0;
+
+    for bounty in &bounties {
+        // Mark as collected
+        sqlx::query(
+            "UPDATE bounties SET status = 'collected', collected_by_user_id = $1, collected_at = NOW() WHERE id = $2"
+        )
+        .bind(user_id)
+        .bind(bounty.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        total_collected += bounty.amount;
+        count += 1;
+    }
+
+    // Award total INF to collector
+    sqlx::query("UPDATE users SET influence = influence + $1 WHERE id = $2")
+        .bind(total_collected)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let collector_name: String = sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|_| "An operative".to_string());
+
+    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Notify target and placers
+    for bounty in &bounties {
+        let _ = sqlx::query(
+            "INSERT INTO notifications (user_id, content) VALUES ($1, $2)"
+        )
+        .bind(target_id)
+        .bind(format!("💀 The bounties on your head ({} total INF) were collected by {}!", total_collected, collector_name))
+        .execute(pool)
+        .await;
+
+        let _ = sqlx::query(
+            "INSERT INTO notifications (user_id, content) VALUES ($1, $2)"
+        )
+        .bind(bounty.placed_by_user_id)
+        .bind(format!("💀 The {} INF bounty you placed was collected by {}!", bounty.amount, collector_name))
+        .execute(pool)
+        .await;
+    }
+
+    let _ = crate::push::notify_user(pool, target_id).await;
+
+    Ok(Json(serde_json::json!({
+        "status": "collected",
+        "total_collected": total_collected,
+        "bounties_collected": count,
+        "target_username": target_name,
+    })))
+}
+
 /// Get the active bounty amount on a specific user
 pub async fn get_user_bounty_total(
     State(state): State<ServerState>,

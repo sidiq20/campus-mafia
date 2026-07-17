@@ -90,6 +90,27 @@ export default function BountiesPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const [collectTarget, setCollectTarget] = useState('');
+
+  const collectByTargetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch('/api/bounties/collect-by-target', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_username: collectTarget }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast.success(`Collected ${data.bounties_collected} bounty${data.bounties_collected > 1 ? 'ies' : 'y'} on @${collectTarget}! +${data.total_collected} INF`);
+      setCollectTarget('');
+      queryClient.invalidateQueries({ queryKey: ['bounties'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   return (
     <DashboardLayout>
       <header className="h-16 border-b border-red-500/30 flex items-center justify-between px-4 sm:px-8 bg-black/60 backdrop-blur-md">
@@ -165,6 +186,31 @@ export default function BountiesPage() {
                   <><span className="font-bold">Need Bounty Hunter status?</span> Purchase a <span className="font-bold">bounty_kill</span> item from the <Link href="/black-market" className="underline hover:text-green-400">Black Market</Link> and use it from your <Link href="/inventory" className="underline hover:text-green-400">Inventory</Link>.</>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Collect by Target */}
+          {hasBountyHunter && (
+            <div className="border border-red-500/20 bg-red-950/10 p-4 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <UserAutocomplete
+                    value={collectTarget}
+                    onChange={setCollectTarget}
+                    placeholder="Collect bounties on target..."
+                  />
+                </div>
+                <button
+                  onClick={() => collectByTargetMutation.mutate()}
+                  disabled={!collectTarget.trim() || collectByTargetMutation.isPending}
+                  className="px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5"
+                >
+                  {collectByTargetMutation.isPending ? 'Collecting...' : 'Collect All'}
+                </button>
+              </div>
+              <p className="text-[9px] text-zinc-600 mt-2">
+                Collect all active bounties on a target in one click. You must have active Bounty Hunter status.
+              </p>
             </div>
           )}
 

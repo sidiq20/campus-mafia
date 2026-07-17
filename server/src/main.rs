@@ -695,6 +695,7 @@ async fn main() {
         // Bounties
         .route("/api/bounties", axum::routing::post(bounties::place_bounty).get(bounties::list_bounties))
         .route("/api/bounties/:id/collect", axum::routing::post(bounties::collect_bounty))
+        .route("/api/bounties/collect-by-target", axum::routing::post(bounties::collect_bounty_by_target))
         .route("/api/bounties/user/:username", get(bounties::get_user_bounty_total))
         .route("/api/bounties/hunter-status", get(bounties::get_hunter_status))
 

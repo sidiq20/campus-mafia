@@ -555,6 +555,7 @@ export default function TerritoryPage() {
   const hasNukes = getQuantity('cyber_nuke') > 0;
   const hasFirewalls = getQuantity('firewall_upgrade') > 0;
   const hasDdos = getQuantity('ddos_attack') > 0;
+  const hasEmpMines = getQuantity('emp_mine') > 0;
 
   const activeRaids = plannedRaids || [];
 
@@ -578,6 +579,7 @@ export default function TerritoryPage() {
     { id: 'cyber_nuke', label: '☢️', qty: getQuantity('cyber_nuke'), color: 'text-red-400', bg: 'bg-red-500/20' },
     { id: 'firewall_upgrade', label: '🛡️', qty: getQuantity('firewall_upgrade'), color: 'text-blue-400', bg: 'bg-blue-500/20' },
     { id: 'ddos_attack', label: '⚡', qty: getQuantity('ddos_attack'), color: 'text-purple-400', bg: 'bg-purple-500/20' },
+    { id: 'emp_mine', label: '⚡', qty: getQuantity('emp_mine'), color: 'text-purple-400', bg: 'bg-purple-500/20' },
   ].filter(b => b.qty > 0);
 
   const triggerBurst = useCallback((type: 'attack' | 'capture' | 'raid' | 'nuke', intensity: 'subtle' | 'normal' | 'intense', factionColor?: string) => {
@@ -1039,6 +1041,17 @@ export default function TerritoryPage() {
                 />
               )}
 
+              {/* EMP Mine */}
+              {hasEmpMines && isOwnedByUser(actionModal.territory) && (
+                <ActionCard
+                  icon={<Zap size={18} />}
+                  label="Plant EMP Mine"
+                  desc="Next attacker loses 50% INF. Lasts 24h. Available: x{getQuantity('emp_mine')}"
+                  variant="defend"
+                  onClick={() => useItemMutation.mutate({ itemId: 'emp_mine', targetId: actionModal.territory!.id })}
+                />
+              )}
+
               {/* Firewall Upgrade */}
               {hasFirewalls && isOwnedByUser(actionModal.territory) && (
                 <ActionCard
@@ -1050,14 +1063,14 @@ export default function TerritoryPage() {
                 />
               )}
 
-              {!hasNukes && !hasFirewalls && isOwnedByUser(actionModal.territory) && (
+              {!hasNukes && !hasFirewalls && !hasEmpMines && isOwnedByUser(actionModal.territory) && (
                 <div className="p-4 border border-zinc-800 rounded-lg text-center">
                   <p className="text-xs text-zinc-600">No deployable items available</p>
                   <p className="text-[10px] text-zinc-700 mt-1">Visit the Black Market to purchase equipment</p>
                 </div>
               )}
 
-              {(hasNukes || hasFirewalls) && !isOwnedByUser(actionModal.territory) && !hasActivePlan(actionModal.territory) && (
+              {(hasNukes || hasFirewalls || hasEmpMines) && !isOwnedByUser(actionModal.territory) && !hasActivePlan(actionModal.territory) && (
                 <div className="text-[10px] text-zinc-600 text-center pt-2 border-t border-zinc-800/50">
                   Tip: Use Plan Raid first to pool INF with faction members, then strike harder.
                 </div>

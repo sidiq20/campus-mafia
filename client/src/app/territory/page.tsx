@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/contexts/UserContext';
 import { useState, useEffect, useCallback } from 'react';
 import AsciiAnimation from '@/components/AsciiAnimation';
+import TerritoryParticles from '@/components/TerritoryParticles';
 import Link from 'next/link';
 
 // ─── Nuke animation overlay ───
@@ -558,8 +559,11 @@ export default function TerritoryPage() {
 
   return (
     <DashboardLayout>
+      {/* ─── Ambient Particle Background ─── */}
+      <div className="relative flex flex-col flex-1 min-h-0">
+        <TerritoryParticles />
       {/* ─── Header ─── */}
-      <header className="h-14 border-b border-green-500/20 flex items-center px-4 sm:px-6 bg-black/40 backdrop-blur-md shrink-0">          <div className="flex items-center gap-3">
+      <header className="h-14 border-b border-green-500/20 flex items-center px-4 sm:px-6 bg-black/60 backdrop-blur-md shrink-0 relative z-10">          <div className="flex items-center gap-3">
           <Swords size={16} className="text-green-500" />
           <h2 className="text-sm font-semibold text-green-500 uppercase tracking-widest">Tactical Map</h2>
           <AsciiAnimation variant="skull" size="sm" className="ml-2 opacity-30" />
@@ -732,11 +736,42 @@ export default function TerritoryPage() {
         {viewMode === 'cards' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {isLoading ? (
-              <div className="col-span-full flex flex-col items-center justify-center py-16 gap-4">
-                <AsciiAnimation variant="radar" size="md" />
-                <div className="flex items-center gap-2 text-zinc-500">
-                  <span className="text-xs font-mono animate-pulse uppercase tracking-widest">Scanning territories...</span>
+              <div className="col-span-full flex flex-col items-center justify-center py-16 gap-6">
+                {/* Scanning animation */}
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full bg-green-500/5 animate-ping-slow" />
+                  <div className="relative w-24 h-24 rounded-full border-2 border-green-500/30 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full border border-green-500/20 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center">
+                        <Swords size={20} className="text-green-500/60" />
+                      </div>
+                    </div>
+                    {/* Scanning arc */}
+                    <div className="absolute inset-0 rounded-full animate-rotate-slow">
+                      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                        <div className="w-3 h-3 rounded-full bg-green-400 shadow-[0_0_10px_rgba(34,197,94,0.6)]" />
+                      </div>
+                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2">
+                        <div className="w-2 h-2 rounded-full bg-green-500/40" />
+                      </div>
+                    </div>
+                    {/* Scan line sweep */}
+                    <div className="absolute inset-0 overflow-hidden rounded-full">
+                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-green-500/10 to-transparent animate-scan-sweep" />
+                    </div>
+                  </div>
                 </div>
+                <div className="flex items-center gap-3 text-zinc-500">
+                  <span className="inline-flex gap-1">
+                    <span className="w-1 h-1 rounded-full bg-green-500 animate-sequence" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1 h-1 rounded-full bg-green-500 animate-sequence" style={{ animationDelay: '200ms' }} />
+                    <span className="w-1 h-1 rounded-full bg-green-500 animate-sequence" style={{ animationDelay: '400ms' }} />
+                  </span>
+                  <span className="text-xs font-mono animate-pulse uppercase tracking-widest text-green-500/50">
+                    <span className="text-green-400">Scanning</span> territories...
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-700 font-mono">// triangulating faction presence</p>
               </div>
             ) : (
               territories?.map((t, idx) => {
@@ -1164,6 +1199,7 @@ export default function TerritoryPage() {
           )}
         </div>
       </div>
+      </div> {/* close relative wrapper */}
     </DashboardLayout>
   );
 }

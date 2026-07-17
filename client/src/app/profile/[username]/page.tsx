@@ -108,12 +108,15 @@ export default function UserProfilePage() {
               <div className="flex-1 min-w-0">
                 <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600 tracking-tighter mb-1">@{user.username}</h1>
                 
-                <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-lg">
+                <Link
+                  href={user.faction_id ? `/factions/${user.faction_id}` : '#'}
+                  className={`mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs font-bold text-zinc-300 ${
+                    user.faction_name ? 'hover:border-purple-500/50 hover:text-purple-400 hover:bg-purple-500/10 transition-all' : 'pointer-events-none'
+                  }`}
+                >
                   <Shield size={14} className={user.faction_name ? "text-purple-500" : "text-zinc-500"} />
-                  <span className="text-xs font-bold text-zinc-300">
-                    {user.faction_name ? `Syndicate: ${user.faction_name}` : 'Unaffiliated'}
-                  </span>
-                </div>
+                  {user.faction_name ? `Syndicate: ${user.faction_name}` : 'Unaffiliated'}
+                </Link>
               </div>
 
               <div className="flex flex-col gap-2">

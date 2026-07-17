@@ -205,10 +205,15 @@ export default function ProfilePage() {
                 )}
                 
                 <div className="flex flex-wrap justify-center md:justify-start gap-3">
-                  <div className="flex items-center gap-2 px-3 py-1 bg-black border border-zinc-800 rounded-full text-xs text-zinc-400">
+                  <Link
+                    href={user.faction_id ? `/factions/${user.faction_id}` : '#'}
+                    className={`flex items-center gap-2 px-3 py-1 bg-black border border-zinc-800 rounded-full text-xs text-zinc-400 ${
+                      user.faction_name ? 'hover:border-purple-500/50 hover:text-purple-400 hover:bg-purple-500/5 transition-all' : 'pointer-events-none'
+                    }`}
+                  >
                     <Shield size={14} className={user.faction_name ? "text-purple-500" : "text-zinc-600"} />
                     {user.faction_name || 'Unaffiliated'}
-                  </div>
+                  </Link>
                   <div className="flex items-center gap-2 px-3 py-1 bg-black border border-zinc-800 rounded-full text-xs text-zinc-400">
                     <CalendarDays size={14} />
                     Joined {new Date(user.created_at || Date.now()).toLocaleDateString()}

@@ -29,11 +29,15 @@ export default function BountiesPage() {
   const [showPlaceBounty, setShowPlaceBounty] = useState(false);
   const [targetUsername, setTargetUsername] = useState('');
   const [bountyAmount, setBountyAmount] = useState(50);
+  const [filterTarget, setFilterTarget] = useState('');
 
   const { data: bounties, isLoading, refetch } = useQuery<Bounty[]>({
-    queryKey: ['bounties'],
+    queryKey: ['bounties', filterTarget],
     queryFn: async () => {
-      const res = await apiFetch('/api/bounties');
+      const url = filterTarget.trim()
+        ? `/api/bounties?target=${encodeURIComponent(filterTarget.trim())}`
+        : '/api/bounties';
+      const res = await apiFetch(url);
       return res.ok ? res.json() : [];
     },
     staleTime: 15_000,
@@ -164,9 +168,27 @@ export default function BountiesPage() {
             </div>
           )}
 
-          {/* Active Bounties */}
-          <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-            <Swords size={14} className="text-red-500" /> Active Contracts
+          {/* Filter by target */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 max-w-xs">
+              <UserAutocomplete
+                value={filterTarget}
+                onChange={setFilterTarget}
+                placeholder="Filter by target username..."
+                className="!border-zinc-700 !focus:border-red-500/50 !text-[11px]"
+              />
+            </div>
+            {filterTarget && (
+              <button
+                onClick={() => setFilterTarget('')}
+                className="text-[10px] text-zinc-500 hover:text-red-400 transition-colors flex items-center gap-1"
+              >
+                <X size={12} /> Clear
+              </button>
+            )}
+            <span className="text-[10px] text-zinc-500 uppercase tracking-widest ml-auto flex items-center gap-2">
+              <Swords size={14} className="text-red-500" /> Active Contracts
+            </span>
           </div>
 
           {isLoading ? (

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { MessageSquare, Lock, Send, ArrowLeft } from 'lucide-react';
+import { MessageSquare, Lock, Send, ArrowLeft, Edit2, Trash2 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BroadcastCooldown } from '@/components/BroadcastCooldown';
@@ -105,6 +105,61 @@ export default function CommsPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 50);
     }
+  });
+
+  // Edit/Delete mutations for own messages
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editMessageText, setEditMessageText] = useState('');
+
+  const editMessageMutation = useMutation({
+    mutationFn: async ({ messageId, content }: { messageId: string; content: string }) => {
+      const res = await apiFetch(`/api/comms/messages/${messageId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+      return res.json();
+    },
+    onMutate: async ({ messageId, content }) => {
+      await queryClient.cancelQueries({ queryKey: ['chat', activeChannel] });
+      const previousMessages = queryClient.getQueryData<ChatMessage[]>(['chat', activeChannel]);
+      queryClient.setQueryData<ChatMessage[]>(['chat', activeChannel], (old) =>
+        old?.map(m => m.id === messageId ? { ...m, content } : m)
+      );
+      setEditingMessageId(null);
+      return { previousMessages };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previousMessages) queryClient.setQueryData(['chat', activeChannel], context.previousMessages);
+      toast.error(err.message || 'Edit failed');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['chat', activeChannel] }),
+  });
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      const res = await apiFetch(`/api/comms/messages/${messageId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete');
+    },
+    onMutate: async (messageId) => {
+      await queryClient.cancelQueries({ queryKey: ['chat', activeChannel] });
+      const previousMessages = queryClient.getQueryData<ChatMessage[]>(['chat', activeChannel]);
+      queryClient.setQueryData<ChatMessage[]>(['chat', activeChannel], (old) =>
+        old?.filter(m => m.id !== messageId)
+      );
+      return { previousMessages };
+    },
+    onError: (err: Error, _messageId, context) => {
+      if (context?.previousMessages) queryClient.setQueryData(['chat', activeChannel], context.previousMessages);
+      toast.error(err.message || 'Delete failed');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['chat', activeChannel] }),
   });
 
   const handleSend = (e?: React.FormEvent) => {
@@ -223,39 +278,97 @@ export default function CommsPage() {
                 ) : messages?.length === 0 ? (
                   <div className="text-center text-zinc-500 text-sm py-10">No logs found on this frequency.</div>
                 ) : (
-                  messages?.map(msg => (
-                    <div key={msg.id} className={`flex flex-col ${msg.author_name === user?.username ? 'items-end' : 'items-start'}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Link href={`/profile/${msg.author_name}`} className={`text-xs font-bold ${msg.author_name === user?.username ? 'text-zinc-400' : 'text-zinc-300 hover:text-green-400'} transition-colors`}>
-                          @{msg.author_display_name || msg.author_name}
-                        </Link>
-                        {msg.faction_name && activeChannel === 'global' && (
-                          <span className="text-[10px] bg-zinc-900 text-zinc-500 px-1 rounded">{msg.faction_name}</span>
-                        )}
-                        <span className="ml-auto text-[10px] text-zinc-600 flex items-center gap-2">
-                          {msg.created_at ? new Date(msg.created_at).toLocaleString() : ''}
-                          {msg.author_name !== user?.username && (
-                            <button 
-                              onClick={() => {
-                                setContent(`@${msg.author_name} `);
-                                // Focus input if we had a ref to it, but just setting state is fine
-                              }}
-                              className="text-blue-500 hover:text-blue-400 uppercase font-bold"
-                            >
-                              Reply
-                            </button>
+                  messages?.map(msg => {
+                    const isMine = msg.author_name === user?.username;
+                    const isEditing = editingMessageId === msg.id;
+                    return (
+                      <div key={msg.id} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Link href={`/profile/${msg.author_name}`} className={`text-xs font-bold ${isMine ? 'text-zinc-400' : 'text-zinc-300 hover:text-green-400'} transition-colors`}>
+                            @{msg.author_display_name || msg.author_name}
+                          </Link>
+                          {msg.faction_name && activeChannel === 'global' && (
+                            <span className="text-[10px] bg-zinc-900 text-zinc-500 px-1 rounded">{msg.faction_name}</span>
                           )}
-                        </span>
+                          <span className="ml-auto text-[10px] text-zinc-600 flex items-center gap-2">
+                            {msg.created_at ? new Date(msg.created_at).toLocaleString() : ''}
+                            {isMine && !isEditing && (
+                              <>
+                                <button
+                                  onClick={() => { setEditMessageText(msg.content); setEditingMessageId(msg.id); }}
+                                  className="text-zinc-600 hover:text-blue-400 transition-colors"
+                                  title="Edit"
+                                >
+                                  <Edit2 size={11} />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Delete this message?')) deleteMessageMutation.mutate(msg.id);
+                                  }}
+                                  className="text-zinc-600 hover:text-red-400 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </>
+                            )}
+                            {!isMine && (
+                              <button 
+                                onClick={() => { setContent(`@${msg.author_name} `); }}
+                                className="text-blue-500 hover:text-blue-400 uppercase font-bold"
+                              >
+                                Reply
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                        {isEditing ? (
+                          <div className="w-full max-w-[80%]">
+                            <textarea
+                              value={editMessageText}
+                              onChange={e => setEditMessageText(e.target.value)}
+                              className={`w-full bg-zinc-900 border border-green-500/50 rounded-lg p-2 text-sm text-zinc-200 outline-none resize-none mb-2 ${
+                                activeChannel === 'global' ? 'bg-green-500/10' : 'bg-purple-500/10'
+                              }`}
+                              rows={2}
+                              autoFocus
+                            />
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                onClick={() => setEditingMessageId(null)}
+                                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (editMessageText.trim()) {
+                                    editMessageMutation.mutate({ messageId: msg.id, content: editMessageText.trim() });
+                                  }
+                                }}
+                                disabled={editMessageMutation.isPending || !editMessageText.trim() || editMessageText.trim() === msg.content}
+                                className={`px-3 py-1 rounded text-[10px] font-bold transition-all disabled:opacity-50 ${
+                                  activeChannel === 'global'
+                                    ? 'bg-green-600 hover:bg-green-500 text-white'
+                                    : 'bg-purple-600 hover:bg-purple-500 text-white'
+                                }`}
+                              >
+                                {editMessageMutation.isPending ? 'Saving...' : 'Save'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`px-4 py-2 rounded max-w-[80%] ${
+                            isMine
+                              ? (activeChannel === 'global' ? 'bg-green-500/20 text-green-100 border border-green-500/30' : 'bg-purple-500/20 text-purple-100 border border-purple-500/30')
+                              : 'bg-zinc-900 text-zinc-200 border border-zinc-800'
+                          }`}>
+                            <p className="text-sm whitespace-pre-wrap"><MentionText text={msg.content} /></p>
+                          </div>
+                        )}
                       </div>
-                      <div className={`px-4 py-2 rounded max-w-[80%] ${
-                        msg.author_name === user?.username 
-                          ? (activeChannel === 'global' ? 'bg-green-500/20 text-green-100 border border-green-500/30' : 'bg-purple-500/20 text-purple-100 border border-purple-500/30')
-                          : 'bg-zinc-900 text-zinc-200 border border-zinc-800'
-                      }`}>
-                        <p className="text-sm whitespace-pre-wrap"><MentionText text={msg.content} /></p>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
                 <div ref={messagesEndRef} />
               </div>

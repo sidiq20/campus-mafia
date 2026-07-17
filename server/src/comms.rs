@@ -389,6 +389,96 @@ pub async fn send_faction_chat(
     Ok(Json(msg))
 }
 
+#[derive(Deserialize)]
+pub struct EditChatMessageRequest {
+    pub content: String,
+}
+
+pub async fn edit_chat_message(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(message_id): Path<uuid::Uuid>,
+    Json(payload): Json<EditChatMessageRequest>,
+) -> Result<Json<ChatMessageResponse>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    if payload.content.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Content cannot be empty".to_string()));
+    }
+
+    // Verify ownership
+    let owner_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM chat_messages WHERE id = $1"
+    )
+    .bind(message_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    if owner_id != Some(user_id) {
+        return Err((StatusCode::FORBIDDEN, "Not authorized to edit this message".to_string()));
+    }
+
+    // Update content + edited flag
+    sqlx::query(
+        "UPDATE chat_messages SET content = $1, is_edited = true WHERE id = $2"
+    )
+    .bind(&payload.content)
+    .bind(message_id)
+    .execute(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Return updated message
+    let msg = sqlx::query_as::<_, ChatMessageResponse>(
+        r#"
+        SELECT 
+            c.id, 
+            c.channel_type, 
+            c.channel_id, 
+            c.content, 
+            u.username as author_name, 
+            u.display_name as author_display_name,
+            f.name as faction_name,
+            c.created_at
+        FROM chat_messages c
+        JOIN users u ON c.user_id = u.id
+        LEFT JOIN factions f ON u.faction_id = f.id
+        WHERE c.id = $1
+        "#
+    )
+    .bind(message_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(msg))
+}
+
+pub async fn delete_chat_message(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(message_id): Path<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+
+    let res = sqlx::query("DELETE FROM chat_messages WHERE id = $1 AND user_id = $2")
+        .bind(message_id)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if res.rows_affected() == 0 {
+        return Err((StatusCode::FORBIDDEN, "Not authorized to delete this message or message does not exist".to_string()));
+    }
+
+    Ok(Json(serde_json::json!({ "status": "deleted" })))
+}
+
 /// Insert a system message into a faction's chat channel (used for raid notifications).
 pub async fn send_faction_system_message(
     pool: &PgPool,

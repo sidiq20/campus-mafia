@@ -655,6 +655,7 @@ async fn main() {
             axum::routing::post(comms::send_faction_chat)
                 .get(comms::get_faction_chat),
         )
+        .route("/api/comms/messages/:id", axum::routing::put(comms::edit_chat_message).delete(comms::delete_chat_message))
 
         // Ranks
         .route("/api/ranks", get(rank::get_ranks_endpoint))

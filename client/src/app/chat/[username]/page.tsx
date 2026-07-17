@@ -10,7 +10,7 @@ import { apiFetch, WS_URL } from '@/lib/api';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
 import { RankBadgeSmall } from '@/components/RankBadge';
-import { Send, ArrowLeft, Reply, X, Check, CheckCheck, SmilePlus } from 'lucide-react';
+import { Send, ArrowLeft, Reply, X, Check, CheckCheck, SmilePlus, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Message = {
@@ -21,6 +21,7 @@ type Message = {
   reply_to_id: string | null;
   reply_to_content: string | null;
   is_read: boolean;
+  is_edited: boolean;
   created_at: string;
 };
 
@@ -62,6 +63,8 @@ export default function DirectChatPage() {
     },
     staleTime: 60_000,
   });
+  const [editingDmId, setEditingDmId] = useState<string | null>(null);
+  const [editDmText, setEditDmText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; content: string } | null>(null);
   const [sendingLock, setSendingLock] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -141,6 +144,35 @@ export default function DirectChatPage() {
     }
   });
 
+  const editDmMutation = useMutation({
+    mutationFn: async ({ messageId, content }: { messageId: string; content: string }) => {
+      const res = await apiFetch(`/api/chat/direct/messages/${messageId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+      return res.json();
+    },
+    onMutate: async ({ messageId, content }) => {
+      await queryClient.cancelQueries({ queryKey: ['chat', username] });
+      const previousMessages = queryClient.getQueryData<Message[]>(['chat', username]);
+      queryClient.setQueryData<Message[]>(['chat', username], (old) =>
+        old?.map(m => m.id === messageId ? { ...m, content } : m)
+      );
+      setEditingDmId(null);
+      return { previousMessages };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previousMessages) queryClient.setQueryData(['chat', username], context.previousMessages);
+      toast.error(err.message || 'Edit failed');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['chat', username] }),
+  });
+
   const reactMutation = useMutation({
     mutationFn: async ({ message_id, reaction }: { message_id: string; reaction: string }) => {
       const res = await apiFetch(`/api/chat/direct/${username}/react`, {
@@ -182,6 +214,7 @@ export default function DirectChatPage() {
               reply_to_id: null,
               reply_to_content: data.reply_to_content || null,
               is_read: false,
+              is_edited: false,
               created_at: data.created_at || new Date().toISOString(),
             };
             return [...old, newMsg];
@@ -300,6 +333,7 @@ export default function DirectChatPage() {
             ) : messages?.map(msg => {
               const myMsg = msg.sender_id === user?.id;
               const msgRxs = msgReactions.get(msg.id) || [];
+              const isEditing = editingDmId === msg.id;
               return (
                 <div key={msg.id} className={`flex ${myMsg ? 'justify-end' : 'justify-start'} group`}>
                   <div className="max-w-[75%] sm:max-w-[60%]">
@@ -311,71 +345,113 @@ export default function DirectChatPage() {
                         {msg.reply_to_content}
                       </div>
                     )}
-                    <div className={`p-3 sm:p-4 rounded-lg border ${myMsg ? 'bg-green-500/10 border-green-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800 rounded-tl-sm'}`}>
-                      <p className="text-sm text-zinc-100 font-mono"><MentionText text={msg.content} /></p>
-                      <div className="flex items-center justify-between gap-2 mt-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] text-zinc-500">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          {/* Read receipt – only shown on own messages */}
-                          {myMsg && (
-                            <span title={msg.is_read ? 'Read' : 'Sent'}>
-                              {msg.is_read
-                                ? <CheckCheck size={12} className="text-green-400" />
-                                : <Check size={12} className="text-zinc-500" />}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {/* Reaction picker */}
-                          {user && (
-                            <div className="relative group/reaction">
-                              <button className="text-[9px] text-zinc-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <SmilePlus size={12} />
-                              </button>
-                              <div className="absolute bottom-full right-0 mb-1 hidden group-hover/reaction:flex gap-0.5 bg-black border border-zinc-800 rounded-lg p-1 shadow-xl z-10">
-                                {REACTIONS.map(r => (
-                                  <button
-                                    key={r}
-                                    onClick={() => reactMutation.mutate({ message_id: msg.id, reaction: r })}
-                                    className="text-sm hover:scale-125 transition-transform px-0.5"
-                                  >
-                                    {r}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {/* Reply button */}
-                          {user && (
-                            <button
-                              onClick={() => {
-                                setReplyTo({ id: msg.id, content: msg.content.slice(0, 80) + (msg.content.length > 80 ? '...' : '') });
-                                inputRef.current?.focus();
-                              }}
-                              className="text-[9px] text-zinc-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Reply"
-                            >
-                              <Reply size={12} />
-                            </button>
-                          )}
+                    {isEditing ? (
+                      <div className={`p-3 sm:p-4 rounded-lg border ${myMsg ? 'bg-green-500/10 border-green-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800 rounded-tl-sm'}`}>
+                        <textarea
+                          value={editDmText}
+                          onChange={e => setEditDmText(e.target.value)}
+                          className="w-full bg-zinc-900 border border-green-500/50 rounded-lg p-2 text-sm text-zinc-200 outline-none resize-none mb-2"
+                          rows={2}
+                          autoFocus
+                        />
+                        <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => setEditingDmId(null)}
+                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (editDmText.trim()) {
+                                editDmMutation.mutate({ messageId: msg.id, content: editDmText.trim() });
+                              }
+                            }}
+                            disabled={editDmMutation.isPending || !editDmText.trim() || editDmText.trim() === msg.content}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded text-[10px] font-bold transition-all"
+                          >
+                            {editDmMutation.isPending ? 'Saving...' : 'Save'}
+                          </button>
                         </div>
                       </div>
-                      {/* Reactions display */}
-                      {msgRxs.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {Object.entries(
-                            msgRxs.reduce((acc: Record<string, number>, r) => {
-                              acc[r.reaction] = (acc[r.reaction] || 0) + 1;
-                              return acc;
-                            }, {})
-                          ).map(([emoji, count]) => (
-                            <span key={emoji} className="text-[10px] bg-black/40 border border-zinc-800 rounded px-1.5 py-0.5">
-                              {emoji} {count > 1 && <span className="text-zinc-500">{count}</span>}
-                            </span>
-                          ))}
+                    ) : (
+                      <div className={`p-3 sm:p-4 rounded-lg border ${myMsg ? 'bg-green-500/10 border-green-500/30 rounded-tr-sm' : 'bg-zinc-900 border-zinc-800 rounded-tl-sm'}`}>
+                        <p className="text-sm text-zinc-100 font-mono"><MentionText text={msg.content} /></p>
+                        <div className="flex items-center justify-between gap-2 mt-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-zinc-500">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            {msg.is_edited && <span className="text-[9px] text-zinc-600 italic">(edited)</span>}
+                            {/* Read receipt – only shown on own messages */}
+                            {myMsg && (
+                              <span title={msg.is_read ? 'Read' : 'Sent'}>
+                                {msg.is_read
+                                  ? <CheckCheck size={12} className="text-green-400" />
+                                  : <Check size={12} className="text-zinc-500" />}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {/* Edit button – only on own messages */}
+                            {myMsg && !isEditing && (
+                              <button
+                                onClick={() => { setEditDmText(msg.content); setEditingDmId(msg.id); }}
+                                className="text-[9px] text-zinc-600 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Edit"
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                            )}
+                            {/* Reaction picker */}
+                            {user && (
+                              <div className="relative group/reaction">
+                                <button className="text-[9px] text-zinc-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <SmilePlus size={12} />
+                                </button>
+                                <div className="absolute bottom-full right-0 mb-1 hidden group-hover/reaction:flex gap-0.5 bg-black border border-zinc-800 rounded-lg p-1 shadow-xl z-10">
+                                  {REACTIONS.map(r => (
+                                    <button
+                                      key={r}
+                                      onClick={() => reactMutation.mutate({ message_id: msg.id, reaction: r })}
+                                      className="text-sm hover:scale-125 transition-transform px-0.5"
+                                    >
+                                      {r}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {/* Reply button */}
+                            {user && (
+                              <button
+                                onClick={() => {
+                                  setReplyTo({ id: msg.id, content: msg.content.slice(0, 80) + (msg.content.length > 80 ? '...' : '') });
+                                  inputRef.current?.focus();
+                                }}
+                                className="text-[9px] text-zinc-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Reply"
+                              >
+                                <Reply size={12} />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
+                        {/* Reactions display */}
+                        {msgRxs.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {Object.entries(
+                              msgRxs.reduce((acc: Record<string, number>, r) => {
+                                acc[r.reaction] = (acc[r.reaction] || 0) + 1;
+                                return acc;
+                              }, {})
+                            ).map(([emoji, count]) => (
+                              <span key={emoji} className="text-[10px] bg-black/40 border border-zinc-800 rounded px-1.5 py-0.5">
+                                {emoji} {count > 1 && <span className="text-zinc-500">{count}</span>}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

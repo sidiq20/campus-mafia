@@ -15,6 +15,7 @@ pub struct DirectMessage {
     pub reply_to_id: Option<uuid::Uuid>,
     pub reply_to_content: Option<String>,
     pub is_read: bool,
+    pub is_edited: Option<bool>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -68,7 +69,7 @@ pub async fn send_dm(
         SELECT 
             i.id, i.sender_id, i.receiver_id, i.content, i.reply_to_id,
             (SELECT content FROM direct_messages WHERE id = i.reply_to_id) as reply_to_content,
-            i.is_read, i.created_at
+            i.is_read, false as is_edited, i.created_at
         FROM inserted i
         "#
     )
@@ -154,7 +155,7 @@ pub async fn get_dm_history(
         SELECT 
             dm.id, dm.sender_id, dm.receiver_id, dm.content, dm.reply_to_id,
             (SELECT content FROM direct_messages WHERE id = dm.reply_to_id) as reply_to_content,
-            dm.is_read, dm.created_at
+            dm.is_read, COALESCE(dm.is_edited, false) as is_edited, dm.created_at
         FROM direct_messages dm
         WHERE (dm.sender_id = $1 AND dm.receiver_id = $2)
            OR (dm.sender_id = $2 AND dm.receiver_id = $1)
@@ -345,6 +346,66 @@ pub async fn add_dm_reaction(
     }
 
     Ok(Json(serde_json::json!({"status": "ok"})))
+}
+
+#[derive(Deserialize)]
+pub struct EditDmRequest {
+    pub content: String,
+}
+
+pub async fn edit_dm(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    Path(message_id): Path<uuid::Uuid>,
+    Json(payload): Json<EditDmRequest>,
+) -> Result<Json<DirectMessage>, (StatusCode, String)> {
+    let pool = &state.pool;
+
+    if payload.content.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Content cannot be empty".to_string()));
+    }
+
+    // Verify ownership
+    let owner_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT sender_id FROM direct_messages WHERE id = $1"
+    )
+    .bind(message_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .flatten();
+
+    if owner_id != Some(auth_user.user_id) {
+        return Err((StatusCode::FORBIDDEN, "Not authorized to edit this message".to_string()));
+    }
+
+    // Update content + edited flag
+    sqlx::query(
+        "UPDATE direct_messages SET content = $1, is_edited = true WHERE id = $2"
+    )
+    .bind(&payload.content)
+    .bind(message_id)
+    .execute(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Return updated message
+    let dm = sqlx::query_as::<_, DirectMessage>(
+        r#"
+        SELECT 
+            dm.id, dm.sender_id, dm.receiver_id, dm.content, dm.reply_to_id,
+            (SELECT content FROM direct_messages WHERE id = dm.reply_to_id) as reply_to_content,
+            dm.is_read, COALESCE(dm.is_edited, false) as is_edited, dm.created_at
+        FROM direct_messages dm
+        WHERE dm.id = $1
+        "#
+    )
+    .bind(message_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(dm))
 }
 
 pub async fn get_dm_reactions(

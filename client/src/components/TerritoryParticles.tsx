@@ -27,18 +27,51 @@ interface GridLine {
   phase: number;
 }
 
-export default function TerritoryParticles({ className = '' }: { className?: string }) {
+function hexToHue(hex: string): number {
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 4) {
+    r = parseInt(hex[1] + hex[1], 16);
+    g = parseInt(hex[2] + hex[2], 16);
+    b = parseInt(hex[3] + hex[3], 16);
+  } else if (hex.length === 7) {
+    r = parseInt(hex.slice(1, 3), 16);
+    g = parseInt(hex.slice(3, 5), 16);
+    b = parseInt(hex.slice(5, 7), 16);
+  } else {
+    return 110; // fallback to green
+  }
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta === 0) return 110;
+  let hue = 0;
+  if (max === r) hue = ((g - b) / delta) % 6;
+  else if (max === g) hue = (b - r) / delta + 2;
+  else hue = (r - g) / delta + 4;
+  hue = Math.round(hue * 60);
+  if (hue < 0) hue += 360;
+  return hue;
+}
+
+export default function TerritoryParticles({ className = '', factionColor }: { className?: string; factionColor?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const gridLinesRef = useRef<GridLine[]>([]);
   const mouseRef = useRef({ x: 0, y: 0 });
   const frameRef = useRef(0);
   const animFrameRef = useRef<number>(0);
+  const baseHueRef = useRef(hexToHue(factionColor || ''));
+
+  // Track when faction color changes — particles adopt the new hue gradually as they die and respawn
+  useEffect(() => {
+    baseHueRef.current = hexToHue(factionColor || '');
+  }, [factionColor]);
 
   const initParticles = useCallback((width: number, height: number) => {
     const particles: Particle[] = [];
     const count = Math.min(60, Math.floor((width * height) / 15000));
-    
+    const baseHue = baseHueRef.current;
+
     for (let i = 0; i < count; i++) {
       const maxLife = 300 + Math.random() * 400;
       particles.push({
@@ -48,7 +81,7 @@ export default function TerritoryParticles({ className = '' }: { className?: str
         speedX: (Math.random() - 0.5) * 0.3,
         speedY: (Math.random() - 0.5) * 0.3 - 0.1,
         opacity: 0.1 + Math.random() * 0.5,
-        hue: 110 + Math.random() * 40, // green-ish to cyan
+        hue: baseHue + (Math.random() - 0.5) * 40, // spread around faction color
         pulse: Math.random() * Math.PI * 2,
         pulseSpeed: 0.01 + Math.random() * 0.03,
         life: Math.random() * maxLife,
@@ -106,9 +139,10 @@ export default function TerritoryParticles({ className = '' }: { className?: str
       const w = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
+      const baseHue = baseHueRef.current;
 
       // ─── Scanline grid ───
-      ctx.strokeStyle = 'rgba(0, 255, 65, 0.04)';
+      ctx.strokeStyle = `hsla(${baseHue}, 100%, 25%, 0.04)`;
       ctx.lineWidth = 0.5;
       const gridSize = 40;
       const offset = (frameRef.current * 0.3) % gridSize;
@@ -128,7 +162,7 @@ export default function TerritoryParticles({ className = '' }: { className?: str
       // ─── Grid lines ───
       gridLinesRef.current.forEach(line => {
         const pulse = Math.sin(frameRef.current * line.speed * 0.01 + line.phase) * 0.5 + 0.5;
-        ctx.strokeStyle = `rgba(0, 255, 65, ${line.opacity * pulse})`;
+        ctx.strokeStyle = `hsla(${baseHue}, 80%, 30%, ${line.opacity * pulse})`;
         ctx.lineWidth = 0.5;
         ctx.beginPath();
         ctx.moveTo(line.x1, line.y1);
@@ -172,6 +206,8 @@ export default function TerritoryParticles({ className = '' }: { className?: str
           p.x = Math.random() * w;
           p.y = Math.random() * h;
           p.maxLife = 300 + Math.random() * 400;
+          // Use current faction hue when respawning
+          p.hue = baseHue + (Math.random() - 0.5) * 40;
         }
 
         const lifeRatio = 1 - Math.abs(p.life / p.maxLife - 0.5) * 2;

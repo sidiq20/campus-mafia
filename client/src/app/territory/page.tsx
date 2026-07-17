@@ -614,7 +614,7 @@ export default function TerritoryPage() {
       <ParticleBurst />
       {/* ─── Ambient Particle Background ─── */}
       <div className="relative flex flex-col flex-1 min-h-0">
-        <TerritoryParticles />
+        <TerritoryParticles factionColor={userFactionColor} />
       {/* ─── Header ─── */}
       <header className="h-14 border-b border-green-500/20 flex items-center px-4 sm:px-6 bg-black/60 backdrop-blur-md shrink-0 relative z-10">          <div className="flex items-center gap-3">
           <Swords size={16} className="text-green-500" />

@@ -405,6 +405,79 @@ async fn delete_post(
     Ok(Json(serde_json::json!({ "status": "deleted" })))
 }
 
+#[derive(serde::Deserialize)]
+struct EditPostRequest {
+    content: String,
+}
+
+async fn edit_post(
+    auth_user: AuthUser,
+    State(state): State<ServerState>,
+    axum::extract::Path(post_id): axum::extract::Path<uuid::Uuid>,
+    Json(payload): Json<EditPostRequest>,
+) -> Result<Json<PostResponse>, (axum::http::StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+    let cost = 15;
+
+    if payload.content.trim().is_empty() {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "Content cannot be empty".to_string()));
+    }
+
+    // Verify ownership and get user INF in one query
+    #[derive(sqlx::FromRow)]
+    struct PostOwner {
+        user_id: Option<uuid::Uuid>,
+        influence: Option<i32>,
+    }
+
+    let owner = sqlx::query_as::<_, PostOwner>(
+        r#"
+        SELECT p.user_id, u.influence
+        FROM posts p
+        LEFT JOIN users u ON u.id = $1
+        WHERE p.id = $2
+        "#
+    )
+    .bind(user_id)
+    .bind(post_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((axum::http::StatusCode::NOT_FOUND, "Post not found".to_string()))?;
+
+    if owner.user_id != Some(user_id) {
+        return Err((axum::http::StatusCode::FORBIDDEN, "Not authorized to edit this post".to_string()));
+    }
+
+    let user_influence = owner.influence.unwrap_or(0);
+    if user_influence < cost {
+        return Err((axum::http::StatusCode::BAD_REQUEST, format!("Not enough INF. Editing a broadcast costs {} INF.", cost)));
+    }
+
+    // Deduct INF and update content
+    sqlx::query("UPDATE users SET influence = influence - $1 WHERE id = $2")
+        .bind(cost)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    sqlx::query("UPDATE posts SET content = $1, is_edited = true WHERE id = $2")
+        .bind(&payload.content)
+        .bind(post_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Return the updated post
+    get_post_by_id(
+        OptionalAuthUser { user_id: Some(user_id) },
+        State(state.clone()),
+        axum::extract::Path(post_id),
+    ).await
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -535,12 +608,11 @@ async fn main() {
 
         // Posts
         .route("/api/posts", axum::routing::post(create_post).get(get_posts))
-        .route("/api/posts/:id", axum::routing::get(get_post_by_id).delete(delete_post))
-        .route(
-            "/api/posts/:id/comments",
+        .route("/api/posts/:id", axum::routing::get(get_post_by_id).delete(delete_post).put(edit_post))        .route("/api/posts/:id/comments",
             axum::routing::post(social::create_comment)
                 .get(social::get_comments),
         )
+        .route("/api/posts/:post_id/comments/:comment_id", axum::routing::put(social::edit_comment))
         .route(
             "/api/posts/:id/react",
             axum::routing::post(social::add_reaction),

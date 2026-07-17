@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from 'react';
-import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search, BarChart3, Plus, X, Target, AlertTriangle } from 'lucide-react';
+import { Zap, Trash2, MessageSquare, ShieldAlert, TrendingUp, Pin, Repeat2, Search, BarChart3, Plus, X, Target, AlertTriangle, Edit2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
@@ -349,11 +349,48 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
   const { user } = useUser();
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(post.content);
   const isPinned = user?.pinned_post_id === post.id;
   const router = useRouter();
 
   const displayAuthor = post.is_anonymous ? 'Anonymous' : `@${post.author_name}`;
   const displayFaction = post.is_anonymous ? 'Classified' : (post.faction_name || 'Unaffiliated');
+
+  const editMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await apiFetch(`/api/posts/${post.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+      return res.json();
+    },
+    onMutate: async (content) => {
+      await queryClient.cancelQueries({ queryKey: ['posts'] });
+      const previousPosts = queryClient.getQueryData<Post[]>(['posts']);
+      queryClient.setQueryData<Post[]>(['posts'], (old) =>
+        old?.map(p => p.id === post.id ? { ...p, content } : p)
+      );
+      setIsEditing(false);
+      return { previousPosts };
+    },
+    onSuccess: () => {
+      toast.success("Broadcast updated (-15 INF)");
+    },
+    onError: (err: Error, _content, context) => {
+      if (context?.previousPosts) queryClient.setQueryData(['posts'], context.previousPosts);
+      toast.error(err.message || 'Edit failed');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    }
+  });
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -541,14 +578,49 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           <span className="text-[10px] font-mono text-zinc-600">
             {post.created_at ? new Date(post.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
           </span>
-          {isMine && (
-            <button onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(); }} className="text-zinc-600 hover:text-red-500 transition-colors">
-              <Trash2 size={14} />
-            </button>
+          {isMine && !isEditing && (
+            <div className="flex items-center gap-1">
+              <button onClick={(e) => { e.stopPropagation(); setEditText(post.content); setIsEditing(true); }} className="text-zinc-600 hover:text-blue-400 transition-colors" title="Edit">
+                <Edit2 size={14} />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(); }} className="text-zinc-600 hover:text-red-500 transition-colors" title="Delete">
+                <Trash2 size={14} />
+              </button>
+            </div>
           )}
         </div>
       </div>
-      <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
+      {isEditing ? (
+        <div className="mb-6" onClick={e => e.stopPropagation()}>
+          <textarea
+            value={editText}
+            onChange={e => setEditText(e.target.value)}
+            className="w-full bg-zinc-900 border border-green-500/50 rounded-lg p-3 text-sm text-zinc-200 outline-none resize-none mb-3"
+            rows={3}
+            autoFocus
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setIsEditing(false); setEditText(post.content); }}
+              className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (!editText.trim()) return;
+                editMutation.mutate(editText.trim());
+              }}
+              disabled={editMutation.isPending || !editText.trim() || editText.trim() === post.content}
+              className="px-4 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded text-xs font-bold transition-all"
+            >
+              {editMutation.isPending ? 'Saving...' : 'Save (-15 INF)'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-zinc-300 leading-relaxed mb-6 font-mono hover:text-green-300 transition-colors"><MentionText text={post.content} /></p>
+      )}
 
       {/* Poll Display */}
       <PollDisplay postId={post.id} />

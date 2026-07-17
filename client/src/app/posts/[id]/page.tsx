@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { MentionText } from '@/components/MentionText';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
-import { ArrowLeft, Zap, MessageSquare, Repeat2, Trash2, Reply, User, Share2 } from 'lucide-react';
+import { ArrowLeft, Zap, MessageSquare, Repeat2, Trash2, Reply, User, Share2, Edit2 } from 'lucide-react';
 import PollCard from '@/components/PollCard';
 import type { PollData } from '@/components/PollCard';
 
@@ -145,6 +145,39 @@ export default function PostDetailPage() {
     }
   });
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+
+  const editMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await apiFetch(`/api/posts/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+      return res.json();
+    },
+    onMutate: async (content) => {
+      await queryClient.cancelQueries({ queryKey: ['post', id] });
+      const previousPost = queryClient.getQueryData<Post>(['post', id]);
+      queryClient.setQueryData<Post>(['post', id], (old) =>
+        old ? { ...old, content } : old
+      );
+      setIsEditing(false);
+      return { previousPost };
+    },
+    onSuccess: () => toast.success('Broadcast updated (-15 INF)'),
+    onError: (err: Error, _content, context) => {
+      if (context?.previousPost) queryClient.setQueryData(['post', id], context.previousPost);
+      toast.error(err.message || 'Edit failed');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['post', id] }),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const res = await apiFetch(`/api/posts/${id}`, { method: 'DELETE' });
@@ -260,17 +293,49 @@ export default function PostDetailPage() {
                 </div>
               </div>
               {isMine && (
-                <button onClick={() => deleteMutation.mutate()} className="text-zinc-600 hover:text-red-400 transition-colors p-1 -mr-1" title="Delete">
-                  <Trash2 size={15} />
-                </button>
+                <div className="flex items-center gap-1 -mr-1">
+                  <button onClick={() => { setEditText(post.content); setIsEditing(true); }} className="text-zinc-600 hover:text-blue-400 transition-colors p-1" title="Edit">
+                    <Edit2 size={13} />
+                  </button>
+                  <button onClick={() => deleteMutation.mutate()} className="text-zinc-600 hover:text-red-400 transition-colors p-1" title="Delete">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               )}
             </div>
 
             {/* Content */}
             <div className="mb-4">
-              <p className="text-[15px] text-zinc-200 leading-relaxed whitespace-pre-wrap font-[350]">
-                <MentionText text={post.content} />
-              </p>
+              {isEditing ? (
+                <div>
+                  <textarea
+                    value={editText}
+                    onChange={e => setEditText(e.target.value)}
+                    className="w-full bg-zinc-900 border border-green-500/50 rounded-lg p-3 text-sm text-zinc-200 outline-none resize-none mb-3"
+                    rows={4}
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setIsEditing(false); setEditText(post.content); }}
+                      className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => { if (editText.trim()) editMutation.mutate(editText.trim()); }}
+                      disabled={editMutation.isPending || !editText.trim() || editText.trim() === post.content}
+                      className="px-4 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded text-xs font-bold transition-all"
+                    >
+                      {editMutation.isPending ? 'Saving...' : 'Save (-15 INF)'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[15px] text-zinc-200 leading-relaxed whitespace-pre-wrap font-[350]">
+                  <MentionText text={post.content} />
+                </p>
+              )}
             </div>
 
             {/* Poll */}
@@ -383,7 +448,11 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
 }) {
   const { user } = useUser();
   const [showReplyForm, setShowReplyForm] = useState(false);
+  const [isEditingComment, setIsEditingComment] = useState(false);
+  const [editCommentText, setEditCommentText] = useState(comment.content);
   const queryClient = useQueryClient();
+
+  const isCommentMine = comment.author_display_name === user?.display_name;
 
   const commentMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -404,6 +473,36 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to reply. Try again.');
     }
+  });
+
+  const editCommentMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await apiFetch(`/api/posts/${postId}/comments/${comment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+      return res.json();
+    },
+    onMutate: async (content) => {
+      await queryClient.cancelQueries({ queryKey: ['comments', postId] });
+      const previousComments = queryClient.getQueryData<Comment[]>(['comments', postId]);
+      queryClient.setQueryData<Comment[]>(['comments', postId], (old) =>
+        old?.map(c => c.id === comment.id ? { ...c, content } : c)
+      );
+      setIsEditingComment(false);
+      return { previousComments };
+    },
+    onSuccess: () => toast.success('Reply updated (-1 INF)'),
+    onError: (err: Error, _content, context) => {
+      if (context?.previousComments) queryClient.setQueryData(['comments', postId], context.previousComments);
+      toast.error(err.message || 'Edit failed');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['comments', postId] }),
   });
 
   return (
@@ -428,13 +527,49 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
             {comment.author_display_name === user?.display_name && (
               <span className="text-[10px] text-green-600">· you</span>
             )}
-            <span className="text-xs text-zinc-600 ml-auto">
+            <span className="text-xs text-zinc-600 ml-auto flex items-center gap-2">
+              {isCommentMine && !isEditingComment && (
+                <button
+                  onClick={() => { setEditCommentText(comment.content); setIsEditingComment(true); }}
+                  className="text-zinc-600 hover:text-blue-400 transition-colors"
+                  title="Edit"
+                >
+                  <Edit2 size={11} />
+                </button>
+              )}
               {formatTimeAgo(comment.created_at)}
             </span>
           </div>
-          <p className="text-sm text-zinc-300 leading-relaxed">
-            <MentionText text={comment.content} />
-          </p>
+          {isEditingComment ? (
+            <div>
+              <textarea
+                value={editCommentText}
+                onChange={e => setEditCommentText(e.target.value)}
+                className="w-full bg-zinc-900 border border-green-500/50 rounded-lg p-2 text-sm text-zinc-200 outline-none resize-none mb-2"
+                rows={2}
+                autoFocus
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setIsEditingComment(false); setEditCommentText(comment.content); }}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { if (editCommentText.trim()) editCommentMutation.mutate(editCommentText.trim()); }}
+                  disabled={editCommentMutation.isPending || !editCommentText.trim() || editCommentText.trim() === comment.content}
+                  className="px-3 py-1 bg-green-600 hover:bg-green-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded text-[10px] font-bold transition-all"
+                >
+                  {editCommentMutation.isPending ? 'Saving...' : 'Save (-1 INF)'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-300 leading-relaxed">
+              <MentionText text={comment.content} />
+            </p>
+          )}
           <div className="flex items-center gap-4 mt-1.5">
             <button
               onClick={() => setShowReplyForm(!showReplyForm)}

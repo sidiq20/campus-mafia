@@ -241,6 +241,96 @@ pub async fn create_comment(
     Ok(Json(comment))
 }
 
+#[derive(Deserialize)]
+pub struct EditCommentRequest {
+    pub content: String,
+}
+
+pub async fn edit_comment(
+    auth_user: AuthUser,
+    State(state): State<crate::ServerState>,
+    Path((post_id, comment_id)): Path<(uuid::Uuid, uuid::Uuid)>,
+    Json(payload): Json<EditCommentRequest>,
+) -> Result<Json<CommentResponse>, (StatusCode, String)> {
+    let pool = &state.pool;
+    let user_id = auth_user.user_id;
+    let cost = 1;
+
+    if payload.content.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Content cannot be empty".to_string()));
+    }
+
+    // Verify ownership and get user INF
+    #[derive(sqlx::FromRow)]
+    struct CommentOwner {
+        user_id: Option<uuid::Uuid>,
+        influence: Option<i32>,
+    }
+
+    let owner = sqlx::query_as::<_, CommentOwner>(
+        r#"
+        SELECT c.user_id, u.influence
+        FROM comments c
+        LEFT JOIN users u ON u.id = $1
+        WHERE c.id = $2 AND c.post_id = $3
+        "#
+    )
+    .bind(user_id)
+    .bind(comment_id)
+    .bind(post_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Comment not found".to_string()))?;
+
+    if owner.user_id != Some(user_id) {
+        return Err((StatusCode::FORBIDDEN, "Not authorized to edit this comment".to_string()));
+    }
+
+    let user_influence = owner.influence.unwrap_or(0);
+    if user_influence < cost {
+        return Err((StatusCode::BAD_REQUEST, format!("Not enough INF. Editing a reply costs {} INF.", cost)));
+    }
+
+    // Deduct INF and update content
+    sqlx::query("UPDATE users SET influence = influence - $1 WHERE id = $2")
+        .bind(cost)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    sqlx::query("UPDATE comments SET content = $1, is_edited = true WHERE id = $2")
+        .bind(&payload.content)
+        .bind(comment_id)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Fetch and return the updated comment
+    let comment = sqlx::query_as::<_, CommentResponse>(
+        r#"
+        SELECT 
+            c.id,
+            c.post_id,
+            c.content,
+            u.display_name as author_display_name,
+            u.username as author_username,
+            c.parent_id,
+            c.created_at
+        FROM comments c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.id = $1
+        "#
+    )
+    .bind(comment_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(comment))
+}
+
 pub async fn get_comments(
     State(state): State<ServerState>,
     Path(post_id): Path<uuid::Uuid>,

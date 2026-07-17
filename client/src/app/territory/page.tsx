@@ -8,7 +8,7 @@ import type { RankInfo } from '@/contexts/UserContext';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/contexts/UserContext';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import AsciiAnimation from '@/components/AsciiAnimation';
 import TerritoryParticles from '@/components/TerritoryParticles';
 import ParticleBurst from '@/components/ParticleBurst';
@@ -434,7 +434,7 @@ export default function TerritoryPage() {
     },
     onSuccess: () => {
       toast.success('Raid Planned!', { description: 'Planning phase started. Other faction members can join!' });
-      triggerBurst('raid', 'subtle');
+      factionBurst('raid', 'subtle');
       queryClient.invalidateQueries({ queryKey: ['planned-raids'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       setPlanModal({ open: false, territory: null });
@@ -460,7 +460,7 @@ export default function TerritoryPage() {
     },
     onSuccess: (data) => {
       toast.success(`Joined Raid!`, { description: `Committed ${data.influence_committed} INF to the raid.` });
-      triggerBurst('raid', 'subtle');
+      factionBurst('raid', 'subtle');
       queryClient.invalidateQueries({ queryKey: ['planned-raids'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       setJoinModal({ open: false, raid: null });
@@ -507,7 +507,7 @@ export default function TerritoryPage() {
       // Optimistic: close modal immediately, show nuke anim + burst
       if (variables.itemId === 'cyber_nuke') {
         const target = actionModal.territory?.name || 'Unknown';
-        triggerBurst('nuke', 'intense');
+        factionBurst('nuke', 'intense');
         setNukeAnim(target);
         setActionModal({ open: false, territory: null });
       }
@@ -561,30 +561,53 @@ export default function TerritoryPage() {
     { id: 'ddos_attack', label: '⚡', qty: getQuantity('ddos_attack'), color: 'text-purple-400', bg: 'bg-purple-500/20' },
   ].filter(b => b.qty > 0);
 
-  const triggerBurst = useCallback((type: 'attack' | 'capture' | 'raid' | 'nuke', intensity: 'subtle' | 'normal' | 'intense') => {
+  const triggerBurst = useCallback((type: 'attack' | 'capture' | 'raid' | 'nuke', intensity: 'subtle' | 'normal' | 'intense', factionColor?: string) => {
     // Dispatch to the center-ish of the screen
     window.dispatchEvent(new CustomEvent('territory-burst', {
-      detail: { x: 0.5, y: 0.4, type, intensity }
+      detail: { x: 0.5, y: 0.4, type, intensity, factionColor }
     }));
   }, []);
+
+  // Build faction color map for burst particle colors
+  const factionColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    const factionColors = ['#22c55e', '#ef4444', '#a855f7', '#3b82f6', '#eab308', '#ec4899', '#14b8a6', '#f97316'];
+    const names = [...new Set((territories || []).filter(t => t.controlling_faction_name).map(t => t.controlling_faction_name!))];
+    names.forEach((name, i) => {
+      map[name] = factionColors[i % factionColors.length];
+    });
+    return map;
+  }, [territories]);
+
+  const userFactionColor = user?.faction_name ? factionColorMap[user.faction_name] : undefined;
 
   // Listen for WS territory events dispatched from DashboardLayout
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as any;
       if (detail?.type && detail?.intensity) return; // already handled by our own dispatch
+      // Try to determine the faction color from the event
+      let factionColor: string | undefined;
+      if (detail?.factionName) {
+        factionColor = factionColorMap[detail.factionName];
+      }
       // If it's from WS (no type/intensity), interpret from event type
       if (detail?.eventType === 'TerritoryAttacked') {
-        triggerBurst('attack', 'subtle');
+        triggerBurst('attack', 'subtle', factionColor);
       } else if (detail?.eventType === 'TerritoryCaptured') {
-        triggerBurst('capture', 'intense');
+        triggerBurst('capture', 'intense', factionColor);
       } else if (detail?.eventType === 'RaidExecuted') {
-        triggerBurst('raid', 'normal');
+        triggerBurst('raid', 'normal', factionColor);
       }
     };
     window.addEventListener('territory-burst-ws', handler);
     return () => window.removeEventListener('territory-burst-ws', handler);
-  }, [triggerBurst]);
+  }, [triggerBurst, factionColorMap]);
+
+  // Helper to trigger bursts with the user's faction color when available
+  const factionBurst = useCallback((type: 'attack' | 'capture' | 'raid' | 'nuke', intensity: 'subtle' | 'normal' | 'intense') => {
+    triggerBurst(type, intensity, userFactionColor);
+  }, [triggerBurst, userFactionColor]);
 
   return (
     <DashboardLayout>

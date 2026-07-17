@@ -22,6 +22,7 @@ interface BurstEvent {
   y: number;
   intensity: 'subtle' | 'normal' | 'intense';
   type: 'attack' | 'capture' | 'raid' | 'nuke';
+  factionColor?: string; // hex color to override type-based hue
 }
 
 const INTENSITY_CONFIG = {
@@ -36,6 +37,33 @@ const TYPE_COLORS: Record<string, { baseHue: number }> = {
   raid:    { baseHue: 30 },   // orange
   nuke:    { baseHue: 140 },  // green
 };
+
+function hexToHue(hex: string): number | null {
+  // Convert hex color (#rgb or #rrggbb) to HSL and return the hue (0-360)
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 4) {
+    r = parseInt(hex[1] + hex[1], 16);
+    g = parseInt(hex[2] + hex[2], 16);
+    b = parseInt(hex[3] + hex[3], 16);
+  } else if (hex.length === 7) {
+    r = parseInt(hex.slice(1, 3), 16);
+    g = parseInt(hex.slice(3, 5), 16);
+    b = parseInt(hex.slice(5, 7), 16);
+  } else {
+    return null;
+  }
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta === 0) return 0;
+  let hue = 0;
+  if (max === r) hue = ((g - b) / delta) % 6;
+  else if (max === g) hue = (b - r) / delta + 2;
+  else hue = (r - g) / delta + 4;
+  hue = Math.round(hue * 60);
+  if (hue < 0) hue += 360;
+  return hue;
+}
 
 export default function ParticleBurst({ className = '' }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -52,13 +80,16 @@ export default function ParticleBurst({ className = '' }: { className?: string }
     const cx = event.x * w;
     const cy = event.y * h;
     const config = INTENSITY_CONFIG[event.intensity];
-    const colorInfo = TYPE_COLORS[event.type] || TYPE_COLORS.attack;
+    // Use faction color if provided, otherwise fall back to type-based color
+    const factionHue = event.factionColor ? hexToHue(event.factionColor) : null;
+    const baseHue = factionHue ?? (TYPE_COLORS[event.type]?.baseHue ?? 0);
     const particles: BurstParticle[] = [];
 
     for (let i = 0; i < config.count; i++) {
       const angle = (Math.PI * 2 * i) / config.count + (Math.random() - 0.5) * 0.5;
       const speed = config.speed * (0.5 + Math.random() * 1.0);
       const hueOffset = (Math.random() - 0.5) * config.hueRange;
+      const p_hue = baseHue + hueOffset;
       const maxLife = config.life * (0.4 + Math.random() * 0.6);
       const isRing = i % 5 === 0;
 
@@ -68,7 +99,7 @@ export default function ParticleBurst({ className = '' }: { className?: string }
         vx: Math.cos(angle) * speed * (isRing ? 1.4 : 1),
         vy: Math.sin(angle) * speed * (isRing ? 1.4 : 1),
         size: isRing ? config.size * 0.5 : config.size * (0.3 + Math.random() * 0.7),
-        hue: colorInfo.baseHue + hueOffset,
+        hue: p_hue,
         opacity: 0.7 + Math.random() * 0.3,
         life: 0,
         maxLife,

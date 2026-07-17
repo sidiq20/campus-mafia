@@ -184,11 +184,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           let title = '';
           let body = '';
           if (data.type === 'NewPost') { title = 'Intel Drop'; body = `@${data.author} broadcasted a message.`; toast(title, { description: body }); }
-          if (data.type === 'TerritoryAttacked') { title = 'Attack Detected'; body = `${data.territory_name} was hit!`; toast.error(title, { description: body }); }
-          if (data.type === 'TerritoryCaptured') { title = 'Territory Captured'; body = `${data.territory_name} was taken!`; toast.success(title, { description: body }); }
+          if (data.type === 'TerritoryAttacked') { title = 'Attack Detected'; body = `${data.territory_name} was hit!`; toast.error(title, { description: body }); window.dispatchEvent(new CustomEvent('territory-burst-ws', { detail: { eventType: 'TerritoryAttacked', territoryName: data.territory_name } })); }
+          if (data.type === 'TerritoryCaptured') { title = 'Territory Captured'; body = `${data.territory_name} was taken!`; toast.success(title, { description: body }); window.dispatchEvent(new CustomEvent('territory-burst-ws', { detail: { eventType: 'TerritoryCaptured', territoryName: data.territory_name } })); }
           if (data.type === 'RaidPlanned') { title = 'Raid Planned'; body = `@${data.planner_name} planned a raid on ${data.target_territory}!`; toast.info(title, { description: body }); }
           if (data.type === 'RaidJoined') { title = 'Raid Joined'; body = `@${data.joiner_name} joined the raid on ${data.target_territory}!`; toast.info(title, { description: body }); }
-          if (data.type === 'RaidExecuted') { title = 'Raid Executed'; body = data.captured ? `${data.target_territory} was captured by ${data.faction_name}!` : `${data.target_territory} was hit for ${data.total_influence} damage!`; toast.success(title, { description: body }); }
+          if (data.type === 'RaidExecuted') { title = 'Raid Executed'; body = data.captured ? `${data.target_territory} was captured by ${data.faction_name}!` : `${data.target_territory} was hit for ${data.total_influence} damage!`; toast.success(title, { description: body }); window.dispatchEvent(new CustomEvent('territory-burst-ws', { detail: { eventType: 'RaidExecuted', captured: data.captured, territoryName: data.target_territory } })); }
           if (data.type === 'Notification' && data.target_username === user?.username) {
             title = data.from ? `DM from ${data.from}` : 'New Message';
             body = 'You have a new direct message';

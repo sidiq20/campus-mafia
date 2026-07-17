@@ -11,6 +11,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useState, useEffect, useCallback } from 'react';
 import AsciiAnimation from '@/components/AsciiAnimation';
 import TerritoryParticles from '@/components/TerritoryParticles';
+import ParticleBurst from '@/components/ParticleBurst';
 import Link from 'next/link';
 
 // ─── Nuke animation overlay ───
@@ -433,6 +434,7 @@ export default function TerritoryPage() {
     },
     onSuccess: () => {
       toast.success('Raid Planned!', { description: 'Planning phase started. Other faction members can join!' });
+      triggerBurst('raid', 'subtle');
       queryClient.invalidateQueries({ queryKey: ['planned-raids'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       setPlanModal({ open: false, territory: null });
@@ -458,6 +460,7 @@ export default function TerritoryPage() {
     },
     onSuccess: (data) => {
       toast.success(`Joined Raid!`, { description: `Committed ${data.influence_committed} INF to the raid.` });
+      triggerBurst('raid', 'subtle');
       queryClient.invalidateQueries({ queryKey: ['planned-raids'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       setJoinModal({ open: false, raid: null });
@@ -501,9 +504,10 @@ export default function TerritoryPage() {
       return res.json();
     },
     onMutate: async (variables) => {
-      // Optimistic: close modal immediately, show nuke anim
+      // Optimistic: close modal immediately, show nuke anim + burst
       if (variables.itemId === 'cyber_nuke') {
         const target = actionModal.territory?.name || 'Unknown';
+        triggerBurst('nuke', 'intense');
         setNukeAnim(target);
         setActionModal({ open: false, territory: null });
       }
@@ -557,8 +561,34 @@ export default function TerritoryPage() {
     { id: 'ddos_attack', label: '⚡', qty: getQuantity('ddos_attack'), color: 'text-purple-400', bg: 'bg-purple-500/20' },
   ].filter(b => b.qty > 0);
 
+  const triggerBurst = useCallback((type: 'attack' | 'capture' | 'raid' | 'nuke', intensity: 'subtle' | 'normal' | 'intense') => {
+    // Dispatch to the center-ish of the screen
+    window.dispatchEvent(new CustomEvent('territory-burst', {
+      detail: { x: 0.5, y: 0.4, type, intensity }
+    }));
+  }, []);
+
+  // Listen for WS territory events dispatched from DashboardLayout
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as any;
+      if (detail?.type && detail?.intensity) return; // already handled by our own dispatch
+      // If it's from WS (no type/intensity), interpret from event type
+      if (detail?.eventType === 'TerritoryAttacked') {
+        triggerBurst('attack', 'subtle');
+      } else if (detail?.eventType === 'TerritoryCaptured') {
+        triggerBurst('capture', 'intense');
+      } else if (detail?.eventType === 'RaidExecuted') {
+        triggerBurst('raid', 'normal');
+      }
+    };
+    window.addEventListener('territory-burst-ws', handler);
+    return () => window.removeEventListener('territory-burst-ws', handler);
+  }, [triggerBurst]);
+
   return (
     <DashboardLayout>
+      <ParticleBurst />
       {/* ─── Ambient Particle Background ─── */}
       <div className="relative flex flex-col flex-1 min-h-0">
         <TerritoryParticles />

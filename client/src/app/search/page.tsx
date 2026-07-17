@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, User, Zap, MessageSquare, Repeat2, ArrowLeft, Hash, Clock, X } from 'lucide-react';
+import UserAutocomplete from '@/components/UserAutocomplete';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
 import { PullToRefresh } from '@/components/PullToRefresh';
@@ -234,6 +235,24 @@ function SearchPageContent() {
                 autoFocus
               />
             </form>
+
+            {/* Quick User Lookup — compact inline autocomplete */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 z-40">
+              <div className="w-[180px] sm:w-[220px]">
+                <UserAutocomplete
+                  value=""
+                  onChange={(val) => {
+                    if (val.trim()) {
+                      saveRecentSearch(val.trim());
+                      router.push(`/profile/${encodeURIComponent(val.trim())}`);
+                    }
+                  }}
+                  placeholder="Quick profile lookup..."
+                  className="!text-[10px] !py-1 !px-2 !h-7 !border-zinc-800/60 !rounded !bg-zinc-900/80 !placeholder:text-zinc-700 !text-zinc-400"
+                />
+              </div>
+              <User size={12} className="text-zinc-600 shrink-0" />
+            </div>
 
             {/* Autocomplete / Recent Searches Dropdown */}
             {showSuggestions && (

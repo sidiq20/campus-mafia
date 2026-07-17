@@ -6,7 +6,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { apiFetch } from '@/lib/api';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
-import { Package, Bomb, Skull, Shield, Tag, Fingerprint, Zap, Infinity, Crosshair, Loader2, X, ChevronRight } from 'lucide-react';
+import { Package, Bomb, Skull, Shield, Tag, Fingerprint, Zap, Infinity, Crosshair, Loader2, X, ChevronRight, Radio, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 
 type InventoryItem = { item_id: string; quantity: number };
@@ -14,12 +14,16 @@ type Territory = { id: string; name: string; controlling_faction_id: string | nu
 type Faction = { id: string; name: string; influence: number; member_count: number };
 
 const ITEM_META: Record<string, { title: string; desc: string; icon: React.ReactNode; color: string; targetType: 'territory' | 'faction' | 'self' | 'none' }> = {
-  cyber_nuke:       { title: 'Cyber Nuke',        desc: 'Deal 50 damage to any territory.',   icon: <Bomb size={18} />,         color: 'text-red-500',    targetType: 'territory' },
-  ddos_attack:      { title: 'DDoS Attack',        desc: 'Paralyze a faction for 1 hour.',     icon: <Skull size={18} />,        color: 'text-red-400',    targetType: 'faction' },
-  firewall_upgrade: { title: 'Firewall Upgrade',   desc: 'Add +50 DEF to a territory.',         icon: <Shield size={18} />,       color: 'text-blue-400',   targetType: 'territory' },
-  propaganda_boost: { title: 'Propaganda Boost',   desc: 'Double INF earned for 30 min.',       icon: <Tag size={18} />,          color: 'text-green-400',  targetType: 'self' },
-  identity_scrambler: { title: 'Identity Scrambler', desc: 'Stealth mode for 1 hour.',           icon: <Fingerprint size={18} />,  color: 'text-purple-400', targetType: 'self' },
-  inf_cap_bypass:   { title: 'Syndicate Pass',     desc: 'Remove daily INF cap for 24 hours.',  icon: <Zap size={18} />,          color: 'text-yellow-400', targetType: 'self' },
+  cyber_nuke:         { title: 'Cyber Nuke',           desc: 'Deal 50 damage to any territory.',             icon: <Bomb size={18} />,         color: 'text-red-500',    targetType: 'territory' },
+  ddos_attack:        { title: 'DDoS Attack',          desc: 'Paralyze a faction for 1 hour.',               icon: <Skull size={18} />,        color: 'text-red-400',    targetType: 'faction' },
+  firewall_upgrade:   { title: 'Firewall Upgrade',     desc: 'Add +50 DEF to a territory.',                  icon: <Shield size={18} />,       color: 'text-blue-400',   targetType: 'territory' },
+  propaganda_boost:   { title: 'Propaganda Boost',     desc: 'Double INF earned for 30 min.',                 icon: <Tag size={18} />,          color: 'text-green-400',  targetType: 'self' },
+  identity_scrambler: { title: 'Identity Scrambler',   desc: 'Stealth mode for 1 hour.',                      icon: <Fingerprint size={18} />,  color: 'text-purple-400', targetType: 'self' },
+  inf_cap_bypass:     { title: 'Syndicate Pass',       desc: 'Remove daily INF cap for 24 hours.',            icon: <Zap size={18} />,          color: 'text-yellow-400', targetType: 'self' },
+  bounty_kill:        { title: 'Bounty Hunter License', desc: 'Activate bounty hunter status for 24 hours.',   icon: <Crosshair size={18} />,    color: 'text-orange-400', targetType: 'self' },
+  spy_drone:          { title: 'Spy Drone',            desc: 'Reveal enemy territory intel for 30 min.',      icon: <Radio size={18} />,        color: 'text-cyan-400',   targetType: 'self' },
+  emp_mine:           { title: 'EMP Mine',             desc: 'Plant on a territory. Attacker loses 50% INF.', icon: <Zap size={18} />,          color: 'text-purple-400', targetType: 'territory' },
+  smoke_screen:       { title: 'Smoke Screen',         desc: 'Hide faction activity for 2 hours.',            icon: <EyeOff size={18} />,      color: 'text-zinc-400',   targetType: 'self' },
 };
 
 export default function InventoryPage() {

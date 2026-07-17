@@ -21,7 +21,7 @@ type Post = {
 };
 import DashboardLayout from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
-import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award, MessageSquare, Radio, TrendingUp, BookOpen, Pin, Smartphone, Monitor, Apple, Download, ChevronDown, ChevronUp, Skull } from 'lucide-react';
+import { User, Shield, Zap, Target, AlertTriangle, Edit2, Check, X, CalendarDays, Award, MessageSquare, Radio, TrendingUp, BookOpen, Pin, Smartphone, Monitor, Apple, Download, ChevronDown, ChevronUp, Skull, Bell } from 'lucide-react';
 import { RankBadgeFull } from '@/components/RankBadge';
 import { TitleSection } from '@/components/TitleBadge';
 import { DailyInfTracker } from '@/components/DailyInfTracker';
@@ -250,6 +250,9 @@ export default function ProfilePage() {
               </div>
             ))}
           </div>
+
+          {/* Recent Alerts Section */}
+          <ProfileAlertsSection />
 
           <DailyInfTracker />
 
@@ -505,6 +508,73 @@ function PwaInstructionsSection() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+type Notification = {
+  id: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+};
+
+function ProfileAlertsSection() {
+  const { data: alerts, isLoading } = useQuery<Notification[]>({
+    queryKey: ['profile-alerts'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/notifications');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  // Show only the 5 latest notifications, with bounty-related ones highlighted
+  const latest = (alerts || []).slice(0, 5);
+
+  if (!latest.length) return null;
+
+  return (
+    <div className="border border-zinc-800 bg-zinc-900/30 p-6 rounded-xl">
+      <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <Bell size={18} className="text-green-500" /> Recent Alerts
+      </h3>
+      <div className="space-y-2">
+        {latest.map(n => {
+          const isBounty = n.content.includes('bounty') || n.content.includes('🎯') || n.content.includes('💀');
+          return (
+            <div
+              key={n.id}
+              className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                !n.is_read
+                  ? 'border-green-500/20 bg-green-500/5'
+                  : isBounty
+                    ? 'border-red-500/20 bg-red-500/5'
+                    : 'border-zinc-800 bg-black/30'
+              }`}
+            >
+              <div className={`mt-0.5 shrink-0 ${isBounty ? 'text-red-400' : !n.is_read ? 'text-green-400' : 'text-zinc-600'}`}>
+                <Bell size={12} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs leading-relaxed ${isBounty ? 'text-red-300' : !n.is_read ? 'text-zinc-200' : 'text-zinc-400'}`}>
+                  {n.content}
+                </p>
+                <p className="text-[9px] text-zinc-600 mt-1">
+                  {new Date(n.created_at).toLocaleDateString()} {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Link
+        href="/notifications"
+        className="mt-3 block text-[10px] text-zinc-600 hover:text-green-400 uppercase tracking-widest font-bold text-center py-2 transition-colors"
+      >
+        View all alerts →
+      </Link>
     </div>
   );
 }

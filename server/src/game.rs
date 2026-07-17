@@ -443,7 +443,8 @@ pub async fn get_faction_by_id(
             f.name, 
             f.description, 
             f.influence,
-            (SELECT COUNT(*) FROM users u WHERE u.faction_id = f.id) as member_count
+            (SELECT COUNT(*) FROM users u WHERE u.faction_id = f.id) as member_count,
+            (SELECT COUNT(*) FROM territories t WHERE t.controlling_faction_id = f.id) as territory_count
         FROM factions f
         WHERE f.id = $1
         "#

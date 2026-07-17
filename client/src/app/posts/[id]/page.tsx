@@ -472,9 +472,10 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
       // Snapshot previous comments
       const previousComments = queryClient.getQueryData<Comment[]>(['comments', postId]);
 
-      // Optimistically add the new comment
+      // Optimistically add the new comment with a unique ID
+      const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const optimisticComment: Comment = {
-        id: `optimistic-${Date.now()}`,
+        id: optimisticId,
         post_id: postId,
         content: text.trim(),
         author_display_name: user?.display_name || user?.username || 'You',
@@ -487,19 +488,20 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
         return old ? [...old, optimisticComment] : [optimisticComment];
       });
 
-      return { previousComments };
+      return { previousComments, optimisticId };
     },
-    onSuccess: (data) => {
+    onSuccess: (data, _vars, context) => {
       setText('');
-      // Replace the optimistic comment with the real server response
+      // Replace only the specific optimistic comment with the real server response
+      const optimisticId = context?.optimisticId;
       queryClient.setQueryData<Comment[]>(['comments', postId], (old) => {
         if (!old) return [data];
-        return old.map(c => c.id.startsWith('optimistic-') ? data : c);
+        return old.map(c => c.id === optimisticId ? data : c);
       });
       onSuccess();
       toast.success('Reply added (+2 INF)');
     },
-    onError: (err, _, context) => {
+    onError: (err, _vars, context) => {
       // Roll back to previous state
       if (context?.previousComments) {
         queryClient.setQueryData(['comments', postId], context.previousComments);

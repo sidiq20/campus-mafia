@@ -179,13 +179,27 @@ function TerritoryMapView({
   onAction,
   userFactionName,
   plannedRaids,
+  factionColorMap: externalColorMap,
 }: {
   territories: Territory[] | undefined;
   isLoading: boolean;
   onAction: (t: Territory) => void;
   userFactionName: string | null | undefined;
   plannedRaids: RaidPlan[];
+  factionColorMap?: Record<string, string>;
 }) {
+  // Use external color map if provided, otherwise build our own
+  const internalColorMap = (() => {
+    if (externalColorMap) return externalColorMap;
+    const map: Record<string, string> = {};
+    const factionColors = ['#22c55e', '#ef4444', '#a855f7', '#3b82f6', '#eab308', '#ec4899', '#14b8a6', '#f97316'];
+    const names = [...new Set(territories?.filter(t => t.controlling_faction_name).map(t => t.controlling_faction_name!) || [])];
+    names.forEach((name, i) => {
+      map[name] = factionColors[i % factionColors.length];
+    });
+    return map;
+  })();
+  const factionColorMap = internalColorMap;
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -211,13 +225,7 @@ function TerritoryMapView({
     row: Math.floor(i / cols),
   }));
 
-  // Generate faction "zones" — group same-faction territories
-  const factionColorMap: Record<string, string> = {};
   const factionNames = [...new Set(territories.filter(t => t.controlling_faction_name).map(t => t.controlling_faction_name!))];
-  const factionColors = ['#22c55e', '#ef4444', '#a855f7', '#3b82f6', '#eab308', '#ec4899', '#14b8a6', '#f97316'];
-  factionNames.forEach((name, i) => {
-    factionColorMap[name] = factionColors[i % factionColors.length];
-  });
 
   return (
     <div className="relative border border-zinc-800 rounded-xl bg-black/60 p-4 sm:p-6 overflow-x-auto">
@@ -254,6 +262,9 @@ function TerritoryMapView({
           const mine = t.controlling_faction_name === userFactionName;
           const unowned = !t.controlling_faction_name;
           const planned = plannedRaids.some(r => r.target_territory_id === t.id && r.status === 'planning');
+          const terrColor = t.controlling_faction_name ? factionColorMap[t.controlling_faction_name] : undefined;
+          const glowShadow = terrColor && !unowned ? `0 0 12px ${terrColor}15, 0 0 4px ${terrColor}10` : undefined;
+          const hoverGlow = terrColor && !unowned ? `0 0 20px ${terrColor}25, 0 0 8px ${terrColor}15` : undefined;
           
           return (
             <div
@@ -266,13 +277,21 @@ function TerritoryMapView({
             >
               <button
                 onClick={() => onAction(t)}
-                className={`w-full p-4 rounded-xl border-2 transition-all duration-300 hover:scale-105 hover:shadow-lg ${
+                className={`w-full p-4 rounded-xl border-2 transition-all duration-300 hover:scale-105 ${
                   mine
-                    ? 'border-green-500/40 bg-green-500/5 hover:bg-green-500/10 hover:shadow-green-500/20'
+                    ? 'border-green-500/40 bg-green-500/5 hover:bg-green-500/10'
                     : unowned
                     ? 'border-zinc-700 bg-zinc-900/50 hover:bg-zinc-800/50'
-                    : 'border-red-500/30 bg-red-500/5 hover:bg-red-500/10 hover:shadow-red-500/20'
+                    : 'border-red-500/30 bg-red-500/5 hover:bg-red-500/10'
                 } ${planned ? 'ring-2 ring-orange-500/60 animate-pulse' : ''}`}
+                style={glowShadow ? { boxShadow: glowShadow } : undefined}
+                onMouseEnter={(e) => {
+                  if (hoverGlow) (e.currentTarget as HTMLElement).style.boxShadow = hoverGlow;
+                }}
+                onMouseLeave={(e) => {
+                  if (glowShadow) (e.currentTarget as HTMLElement).style.boxShadow = glowShadow;
+                  else (e.currentTarget as HTMLElement).style.boxShadow = '';
+                }}
               >
                 {/* Territory name */}
                 <div className="text-center mb-2">
@@ -834,12 +853,26 @@ export default function TerritoryPage() {
                 const color = mine ? 'text-green-400' : unowned ? 'text-zinc-500' : 'text-red-400';
                 const borderColor = mine ? 'border-green-500/30' : unowned ? 'border-zinc-800' : 'border-red-500/20';
                 const barColor = mine ? 'bg-green-500' : unowned ? 'bg-zinc-600' : 'bg-red-500';
+                const terrColor = t.controlling_faction_name ? factionColorMap[t.controlling_faction_name] : undefined;
+                const glowShadow = terrColor && !unowned ? `0 0 12px ${terrColor}15, 0 0 4px ${terrColor}10` : undefined;
+                const hoverGlow = terrColor && !unowned ? `0 0 20px ${terrColor}25, 0 0 8px ${terrColor}15` : undefined;
                 
                 return (
                   <div
                     key={t.id}
                     className={`animate-fade-in relative group border ${borderColor} bg-black/40 rounded-xl p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(0,0,0,0.5)] hover:border-opacity-50 ${planned ? 'ring-1 ring-orange-500/40' : ''}`}
-                    style={{ animationDelay: `${idx * 60}ms`, animationFillMode: 'backwards' }}
+                    style={{
+                      animationDelay: `${idx * 60}ms`,
+                      animationFillMode: 'backwards',
+                      ...(glowShadow ? { boxShadow: glowShadow } : {}),
+                    }}
+                    onMouseEnter={(e) => {
+                      if (hoverGlow) (e.currentTarget as HTMLElement).style.boxShadow = hoverGlow;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (glowShadow) (e.currentTarget as HTMLElement).style.boxShadow = glowShadow;
+                      else (e.currentTarget as HTMLElement).style.boxShadow = '';
+                    }}
                   >
                   {/* Planning badge */}
                   {planned && (
@@ -940,6 +973,7 @@ export default function TerritoryPage() {
           onAction={openActionModal}
           userFactionName={user?.faction_name}
           plannedRaids={activeRaids}
+          factionColorMap={factionColorMap}
         />
       )}
 

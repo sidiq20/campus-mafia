@@ -501,7 +501,10 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: commentText })
       });
-      if (!res.ok) throw new Error('Failed to comment');
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Unknown error');
+        throw new Error(errText || 'Failed to comment');
+      }
       return res.json();
     },
     onMutate: async () => {
@@ -536,12 +539,19 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
       queryClient.invalidateQueries({ queryKey: ['me'] });
       toast.success("Comment added (+2 INF)");
     },
-    onError: (err, _, context) => {
+    onError: async (err, _, context) => {
       // Roll back optimistic update
       if (context?.previousComments) {
         queryClient.setQueryData(['comments', post.id], context.previousComments);
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to send reply. Try again.');
+      const msg = err instanceof Error ? err.message : 'Reply failed';
+      if (msg.includes('banned') || msg.includes('TOO_MANY_REQUESTS')) {
+        toast.error('Slow down! You are replying too fast.', { description: 'Please wait before sending another reply.' });
+        // Keep textarea content so user can retry after rate limit
+      } else {
+        setCommentText('');
+        toast.error(msg || 'Reply failed. Try again.');
+      }
     },
     onSettled: () => {
       commentSendingRef.current = false;

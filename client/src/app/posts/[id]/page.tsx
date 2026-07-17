@@ -465,7 +465,10 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, parent_id: comment.id })
       });
-      if (!res.ok) throw new Error('Failed to reply');
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Unknown error');
+        throw new Error(errText || 'Failed to reply');
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -475,7 +478,12 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
       toast.success("Reply sent (+2 INF)");
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Failed to reply. Try again.');
+      const msg = err instanceof Error ? err.message : 'Reply failed';
+      if (msg.includes('banned') || msg.includes('TOO_MANY_REQUESTS')) {
+        toast.error('Slow down! You are replying too fast.', { description: 'Please wait before sending another reply.' });
+      } else {
+        toast.error(msg || 'Reply failed. Try again.');
+      }
     }
   });
 
@@ -629,7 +637,10 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: text, parent_id: parentId })
       });
-      if (!res.ok) throw new Error('Failed to reply');
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Unknown error');
+        throw new Error(errText || 'Failed to reply');
+      }
       return res.json();
     },
     onMutate: async () => {
@@ -669,12 +680,19 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
       onSuccess();
       toast.success('Reply added (+2 INF)');
     },
-    onError: (err, _vars, context) => {
+    onError: async (err, _vars, context) => {
       // Roll back to previous state
       if (context?.previousComments) {
         queryClient.setQueryData(['comments', postId], context.previousComments);
       }
-      toast.error(err instanceof Error ? err.message : 'Failed');
+      const msg = err instanceof Error ? err.message : 'Failed';
+      if (msg.includes('banned') || msg.includes('TOO_MANY_REQUESTS')) {
+        toast.error('Slow down! You are replying too fast.', { description: 'Please wait before sending another reply.' });
+        // Keep textarea content so user can retry after rate limit
+      } else {
+        setText('');
+        toast.error(msg || 'Reply failed. Try again.');
+      }
     },
     onSettled: () => {
       // Refetch to ensure consistency

@@ -213,7 +213,9 @@ export default function PostDetailPage() {
                       {post.author_name}
                     </Link>
                     {post.author_username && (
-                      <span className="text-xs text-zinc-500">@{post.author_username}</span>
+                      <Link href={`/profile/${post.author_username}`} className="text-xs text-zinc-500 hover:text-green-400 transition-colors">
+                        @{post.author_username}
+                      </Link>
                     )}
                     <Link href={`/chat/${post.author_username || post.author_name}`} className="text-[10px] font-bold text-green-600 hover:text-green-400 border border-green-900 px-1.5 py-0.5 rounded transition-colors">
                       DM
@@ -392,7 +394,9 @@ function CommentThread({ comment, replies, postId, refetchComments, depth }: {
               {comment.author_display_name}
             </Link>
             {comment.author_username && (
-              <span className="text-xs text-zinc-500">@{comment.author_username}</span>
+              <Link href={`/profile/${comment.author_username}`} className="text-xs text-zinc-500 hover:text-green-400 transition-colors">
+                @{comment.author_username}
+              </Link>
             )}
             {comment.author_display_name === user?.display_name && (
               <span className="text-[10px] text-green-600">· you</span>
@@ -471,6 +475,7 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
   const sendingRef = useRef(false);
 
   const handleReply = () => {
+    if (!user) { toast.error('Create an identity first.'); return; }
     if (!text.trim() || mutation.isPending || sendingRef.current) return;
     sendingRef.current = true;
     mutation.mutate(undefined, {
@@ -484,8 +489,9 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
         type="text"
         value={text}
         onChange={e => setText(e.target.value)}
-        placeholder={placeholder}
-        className="flex-1 bg-transparent border-none outline-none text-sm text-zinc-200 placeholder-zinc-600"
+        placeholder={user ? placeholder : 'Create an identity to reply'}
+        disabled={!user}
+        className="flex-1 bg-transparent border-none outline-none text-sm text-zinc-200 placeholder-zinc-600 disabled:opacity-40"
         onKeyDown={e => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -495,7 +501,7 @@ function ReplyForm({ postId, parentId, onSuccess, placeholder }: {
       />
       <button
         onClick={handleReply}
-        disabled={!text.trim() || mutation.isPending || sendingRef.current}
+        disabled={!user || !text.trim() || mutation.isPending || sendingRef.current}
         className="px-4 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-full text-xs font-bold transition-all disabled:cursor-not-allowed"
       >
         {mutation.isPending ? (

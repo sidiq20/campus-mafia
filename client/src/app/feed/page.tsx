@@ -561,12 +561,14 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
           <div className="flex gap-2 sm:gap-3 mt-4">              <MentionAutocomplete
                 value={commentText}
                 onChange={setCommentText}
-                placeholder="Add your intel..."
+                placeholder={user ? "Add your intel..." : "Create an identity to reply"}
                 className="flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded px-3 sm:px-4 py-2 text-xs outline-none focus:border-green-500/50 text-zinc-200"
                 rows={1}
+                disabled={!user}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
+                    if (!user) { toast.error('Create an identity first.'); return; }
                     if (!commentText.trim() || commentSendingRef.current) return;
                     commentMutation.mutate();
                   }
@@ -574,10 +576,11 @@ function PostCard({ post, isMine, isAnonymousUser }: { post: Post, isMine: boole
               />
             <button 
               onClick={() => {
+                if (!user) { toast.error('Create an identity first.'); return; }
                 if (!commentText.trim() || commentSendingRef.current) return;
                 commentMutation.mutate();
               }}
-              disabled={!commentText.trim() || commentSendingRef.current}
+              disabled={!user || !commentText.trim() || commentSendingRef.current}
               className="px-3 sm:px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 shrink-0"
             >
               {commentSendingRef.current ? '...' : 'Reply'}

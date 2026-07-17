@@ -5,7 +5,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{ServerState, auth::{AuthUser, OptionalAuthUser}, rank};
+use crate::{ServerState, auth::AuthUser, rank};
 
 // ─── INF Transfer ───
 
@@ -126,7 +126,7 @@ pub struct CreateCommentRequest {
 }
 
 pub async fn create_comment(
-    auth_user: OptionalAuthUser,
+    auth_user: AuthUser,
     State(state): State<ServerState>,
     Path(post_id): Path<uuid::Uuid>,
     Json(payload): Json<CreateCommentRequest>,
@@ -134,16 +134,14 @@ pub async fn create_comment(
     let pool = &state.pool;
     let user_id = auth_user.user_id;
 
-    // Rate limit: max 2 replies per minute, 1h ban on 3rd+ attempt (only for authenticated users)
-    if let Some(uid) = user_id {
-        match crate::rate_limit::check_and_record(pool, uid, crate::rate_limit::ACTION_REPLY).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        {
-            crate::rate_limit::RateLimitResult::Allowed => {}
-            crate::rate_limit::RateLimitResult::Banned(until) => {
-                let remaining = (until - chrono::Utc::now()).num_seconds().max(0);
-                return Err((StatusCode::TOO_MANY_REQUESTS, format!("You have been temporarily banned from replying for {} more seconds. Slow down!", remaining)));
-            }
+    // Rate limit: max 2 replies per minute, 1h ban on 3rd+ attempt
+    match crate::rate_limit::check_and_record(pool, user_id, crate::rate_limit::ACTION_REPLY).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        crate::rate_limit::RateLimitResult::Allowed => {}
+        crate::rate_limit::RateLimitResult::Banned(until) => {
+            let remaining = (until - chrono::Utc::now()).num_seconds().max(0);
+            return Err((StatusCode::TOO_MANY_REQUESTS, format!("You have been temporarily banned from replying for {} more seconds. Slow down!", remaining)));
         }
     }
 
@@ -218,10 +216,9 @@ pub async fn create_comment(
         }
     }
 
-    // Still track comment titles for the commenter
-    if let Some(uid) = user_id {
-        let _ = crate::titles::check_comment_titles(pool, uid).await;
-    }
+    // Track comment titles for the commenter
+    let _ = crate::titles::check_comment_titles(pool, user_id).await;
+
     for tag in tags {
         if let Ok(Some(tagged_id)) = sqlx::query_scalar::<_, uuid::Uuid>(
             "SELECT id FROM users WHERE username = $1"

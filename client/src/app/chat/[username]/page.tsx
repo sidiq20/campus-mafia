@@ -9,6 +9,7 @@ import { MentionText } from '@/components/MentionText';
 import { apiFetch, WS_URL } from '@/lib/api';
 import Link from 'next/link';
 import { useUser } from '@/contexts/UserContext';
+import { RankBadgeSmall } from '@/components/RankBadge';
 import { Send, ArrowLeft, Reply, X, Check, CheckCheck, SmilePlus } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -50,6 +51,17 @@ export default function DirectChatPage() {
     staleTime: 5_000,
   });
   const isOnline = onlineUsers.includes(username);
+
+  // Fetch the other user's profile (for rank badge)
+  const { data: otherUser } = useQuery({
+    queryKey: ['user', username],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/users/${username}`);
+      if (!res.ok) throw new Error('Failed to fetch user');
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
   const [replyTo, setReplyTo] = useState<{ id: string; content: string } | null>(null);
   const [sendingLock, setSendingLock] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -251,7 +263,13 @@ export default function DirectChatPage() {
         </Link>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text truncate">Direct Channel // @{username}</h2>
+            <h2 className="text-sm font-bold text-green-500 uppercase tracking-widest glow-text truncate flex items-center gap-2">
+              Direct Channel //{' '}
+              <Link href={`/profile/${username}`} className="hover:text-green-300 transition-colors">
+                @{username}
+              </Link>
+              <RankBadgeSmall rank={otherUser?.rank} />
+            </h2>
             <span
               className={`w-2 h-2 rounded-full shrink-0 ${
                 isOnline

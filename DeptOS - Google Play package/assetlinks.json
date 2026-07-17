@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.vercel.campus_mafia.twa",
+        "sha256_cert_fingerprints": ["0E:3A:62:49:FC:E1:6C:1F:4C:FC:EE:A2:C9:2C:1E:8A:CE:2A:87:34:83:64:2A:46:A8:58:93:A0:9C:F9:72:98"]
+      }
+    }]

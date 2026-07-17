@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/contexts/UserContext';
 import { useState, useEffect, useCallback } from 'react';
 import AsciiAnimation from '@/components/AsciiAnimation';
+import Link from 'next/link';
 
 // ─── Nuke animation overlay ───
 function NukeAnimation({ onDone }: { onDone: () => void }) {
@@ -770,7 +771,11 @@ export default function TerritoryPage() {
                         <h3 className="font-bold text-sm text-zinc-200">{t.name}</h3>
                         <span className={`text-[10px] font-bold ${color} flex items-center gap-1 mt-0.5`}>
                           <Shield size={10} />
-                          {t.controlling_faction_name || 'Rogue'}
+                          {t.controlling_faction_id ? (
+                            <Link href={`/factions/${t.controlling_faction_id}`} className="hover:underline hover:text-green-300 transition-colors">
+                              {t.controlling_faction_name}
+                            </Link>
+                          ) : 'Rogue'}
                         </span>
                       </div>
                     </div>
@@ -864,9 +869,17 @@ export default function TerritoryPage() {
           {actionModal.territory && (
             <div className="space-y-3">
               <p className="text-[10px] text-zinc-500 mb-2 uppercase tracking-wider">
-                Controlled by <span className={isOwnedByUser(actionModal.territory) ? 'text-green-400' : 'text-red-400'}>
-                  {actionModal.territory.controlling_faction_name || 'Rogue'}
-                </span>
+                Controlled by{' '}
+                {actionModal.territory.controlling_faction_id ? (
+                  <Link
+                    href={`/factions/${actionModal.territory.controlling_faction_id}`}
+                    className={`hover:underline transition-colors ${isOwnedByUser(actionModal.territory) ? 'text-green-400 hover:text-green-300' : 'text-red-400 hover:text-red-300'}`}
+                  >
+                    {actionModal.territory.controlling_faction_name}
+                  </Link>
+                ) : (
+                  <span className="text-zinc-500">Rogue</span>
+                )}
               </p>
 
               {/* Plan Raid (enemy territories only) */}
@@ -942,7 +955,14 @@ export default function TerritoryPage() {
                   <p className="text-[10px] text-zinc-500">
                     Defense: <span className="font-mono text-zinc-300">{planModal.territory.defense_score}</span>
                     <span className="mx-2">·</span>
-                    Controlled by: {planModal.territory.controlling_faction_name || 'Rogue'}
+                    Controlled by:{' '}
+                    {planModal.territory.controlling_faction_id ? (
+                      <Link href={`/factions/${planModal.territory.controlling_faction_id}`} className="text-zinc-300 hover:text-green-400 hover:underline">
+                        {planModal.territory.controlling_faction_name}
+                      </Link>
+                    ) : (
+                      <span className="text-zinc-500">Rogue</span>
+                    )}
                   </p>
                 </div>
               </div>

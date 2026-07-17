@@ -10,7 +10,7 @@ import { Package, Bomb, Skull, Shield, Tag, Fingerprint, Zap, Infinity, Crosshai
 import Link from 'next/link';
 
 type InventoryItem = { item_id: string; quantity: number };
-type Territory = { id: string; name: string; controlling_faction_name: string | null; defense_score: number };
+type Territory = { id: string; name: string; controlling_faction_id: string | null; controlling_faction_name: string | null; defense_score: number };
 type Faction = { id: string; name: string; influence: number; member_count: number };
 
 const ITEM_META: Record<string, { title: string; desc: string; icon: React.ReactNode; color: string; targetType: 'territory' | 'faction' | 'self' | 'none' }> = {
@@ -197,10 +197,6 @@ export default function InventoryPage() {
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {targets && (targets as any[]).length > 0 ? (targets as any[]).map((t: any) => {
                 const isSelected = selectedTarget === t.id;
-                const factionName = t.controlling_faction_name || t.name;
-                const detail = t.defense_score !== undefined
-                  ? `DEF: ${t.defense_score} · ${t.controlling_faction_name || 'Unclaimed'}`
-                  : `${t.member_count || 0} members · ${t.influence || 0} INF`;
                 return (
                   <button
                     key={t.id}
@@ -213,7 +209,21 @@ export default function InventoryPage() {
                   >
                     <div className="min-w-0">
                       <div className="text-sm font-bold text-zinc-200 truncate">{t.name}</div>
-                      <div className="text-[10px] text-zinc-500 mt-0.5">{detail}</div>
+                      <div className="text-[10px] text-zinc-500 mt-0.5">
+                        {'defense_score' in t && t.defense_score !== undefined ? (
+                          <>
+                            DEF: {t.defense_score}
+                            <span className="mx-1">·</span>
+                            {t.controlling_faction_id ? (
+                              <Link href={`/factions/${t.controlling_faction_id}`} onClick={e => e.stopPropagation()} className="text-purple-400/70 hover:text-purple-300 hover:underline">
+                                {t.controlling_faction_name || 'Unclaimed'}
+                              </Link>
+                            ) : 'Unclaimed'}
+                          </>
+                        ) : (
+                          <>{t.member_count || 0} members · {t.influence || 0} INF</>
+                        )}
+                      </div>
                     </div>
                     {isSelected && <Crosshair size={14} className="text-yellow-400 shrink-0" />}
                   </button>

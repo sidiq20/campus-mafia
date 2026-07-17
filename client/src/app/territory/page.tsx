@@ -2,7 +2,9 @@
 
 import DashboardLayout from '@/components/DashboardLayout';
 import { apiFetch } from '@/lib/api';
-import { Shield, Users, Bomb, Clock, UserPlus, Zap, X, Swords, ChevronDown, ChevronRight, Radio, MapPin, Crosshair, LayoutGrid, Map as MapIcon, AlertTriangle, Target } from 'lucide-react';
+import { Shield, Users, Bomb, Clock, UserPlus, Zap, X, Swords, ChevronDown, ChevronRight, Radio, MapPin, Crosshair, LayoutGrid, Map as MapIcon, AlertTriangle, Target, Crown, Star, UserCog } from 'lucide-react';
+import { RankBadgeSmall } from '@/components/RankBadge';
+import type { RankInfo } from '@/contexts/UserContext';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@/contexts/UserContext';
@@ -343,6 +345,7 @@ export default function TerritoryPage() {
   
   // Modal state
   const [actionModal, setActionModal] = useState<{ open: boolean; territory: Territory | null }>({ open: false, territory: null });
+  const [membersModal, setMembersModal] = useState<{ open: boolean; faction: Faction | null }>({ open: false, faction: null });
   const [planModal, setPlanModal] = useState<{ open: boolean; territory: Territory | null }>({ open: false, territory: null });
   const [joinModal, setJoinModal] = useState<{ open: boolean; raid: RaidPlan | null }>({ open: false, raid: null });
   const [ddosModal, setDdosModal] = useState(false);
@@ -391,6 +394,26 @@ export default function TerritoryPage() {
       return res.json();
     },
     staleTime: 60_000,
+  });
+
+  // ─── Faction Members Query (for standing row popover) ───
+  type FactionMember = {
+    id: string;
+    username: string;
+    influence: number;
+    rank: RankInfo;
+    faction_role: string;
+  };
+
+  const { data: factionMembers, isLoading: isLoadingMembers } = useQuery<FactionMember[]>({
+    queryKey: ['faction-members', membersModal.faction?.id],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/factions/${membersModal.faction!.id}/members`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!membersModal.faction?.id,
+    staleTime: 30_000,
   });
 
   const planRaidMutation = useMutation({
@@ -969,6 +992,58 @@ export default function TerritoryPage() {
           )}
         </Modal>
 
+        {/* ─── Faction Members Popover ─── */}
+        <Modal 
+          open={membersModal.open} 
+          onClose={() => { setMembersModal({ open: false, faction: null }); }} 
+          title={membersModal.faction?.name || 'Faction Members'}
+        >
+          <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
+            {isLoadingMembers ? (
+              <div className="text-center text-zinc-500 text-xs py-10 animate-pulse">Decrypting operative roster...</div>
+            ) : (!factionMembers || factionMembers.length === 0) ? (
+              <div className="text-center text-zinc-600 text-xs py-10">No operatives found in this syndicate</div>
+            ) : (
+              factionMembers.map((member, i) => (
+                <div key={member.id} className="flex items-center justify-between p-3 rounded-lg bg-zinc-900/50 border border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-[10px] text-zinc-700 font-mono w-4 shrink-0 text-right">{i + 1}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-zinc-200 truncate">@{member.username}</span>
+                        {member.faction_role === 'head' && <Crown size={12} className="text-yellow-500 shrink-0" aria-label="Head" />}
+                        {member.faction_role === 'vice_head' && <Star size={12} className="text-purple-400 shrink-0" aria-label="Vice Head" />}
+                        {member.faction_role === 'executive' && <UserCog size={12} className="text-blue-400 shrink-0" aria-label="Executive" />}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <RankBadgeSmall rank={member.rank} />
+                        {member.faction_role !== 'member' && (
+                          <span className="text-[9px] uppercase tracking-wider text-zinc-600">
+                            {member.faction_role.replace('_', ' ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs font-mono shrink-0 ml-3">
+                    <Zap size={10} className="text-yellow-600" />
+                    <span className="text-yellow-500 font-bold">{member.influence.toLocaleString()}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          {factionMembers && factionMembers.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-zinc-800/50 flex items-center justify-between text-[10px] text-zinc-600">
+              <span>{factionMembers.length} operative{factionMembers.length !== 1 ? 's' : ''}</span>
+              <span className="flex items-center gap-1">
+                <Zap size={10} className="text-yellow-700" />
+                {factionMembers.reduce((sum, m) => sum + m.influence, 0).toLocaleString()} total INF
+              </span>
+            </div>
+          )}
+        </Modal>
+
         {/* ─── DDoS Section ─── */}
         {hasDdos && (
           <div className="border border-purple-500/20 bg-purple-500/5 rounded-xl overflow-hidden">
@@ -1035,9 +1110,14 @@ export default function TerritoryPage() {
                         {String(i + 1).padStart(2, '0')}
                       </span>
                       <div>
-                        <span className={`font-bold text-sm ${isUserFaction ? 'text-green-400' : 'text-zinc-200'}`}>
+                        <button
+                          onClick={() => setMembersModal({ open: true, faction })}
+                          className={`font-bold text-sm text-left hover:underline transition-colors ${
+                            isUserFaction ? 'text-green-400 hover:text-green-300' : 'text-zinc-200 hover:text-green-400'
+                          }`}
+                        >
                           {faction.name}
-                        </span>
+                        </button>
                         {isUserFaction && (
                           <span className="ml-2 text-[9px] text-green-600 border border-green-500/30 px-1.5 py-0.5 rounded uppercase">You</span>
                         )}
